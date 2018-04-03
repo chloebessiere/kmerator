@@ -6,6 +6,7 @@
 #using OpenGene
 using ArgParse
 @everywhere using FastaIO
+@everywhere using ProgressMeter
 #using Bio.Seq
 
 
@@ -49,6 +50,7 @@ s = ArgParseSettings()
     "--threshold"
         help = "FOR GENE LEVEL ONLY : Minimum fraction of annotated transcripts containing this kmer to admit it (default 0.5)"
         default = 0.5
+        arg_type = Float64
 end
 parsed_args = parse_args(ARGS, s)
 
@@ -201,7 +203,6 @@ if unannotated_option == false
     end
 end
 end
-println("C'est finit ?")
 println(readdir("$output/sequences/$kmer_length/"))
 
 #println(keys(dico_transcriptome))
@@ -223,6 +224,8 @@ println(readdir("$output/sequences/$kmer_length/"))
 #@everywhere function f(splitted_fasta_files, unannotated_option, genome, transcriptome, level, output, kmer_length, stringent_option, admission_threshold)
 @everywhere function f(splitted_fasta_files)
  
+sleep(myid()*5)
+
 #@parallel for splitted_fasta_files in readdir("$output/sequences/$kmer_length/")
 println("$splitted_fasta_files")
 #println(dico_transcriptome)
@@ -266,11 +269,15 @@ for (desc, seq) in fr
   sequence_fasta = "$seq"
 end
 end
-println("$sequence_fasta")
+#println("$sequence_fasta")
+#println("")
+
 #global genome
   kmercounts_genome = readstring(`jellyfish query -s "$output/sequences/$kmer_length/$splitted_fasta_files" "$genome"`)
+  println("jellyfish query on genome.jf finished")
   kmercounts_transcriptome = readstring(`jellyfish query -s "$output/sequences/$kmer_length/$splitted_fasta_files" "$transcriptome"`)
 
+  println("jellyfish query on transcriptome.jf finished")
 
 
 
@@ -296,7 +303,7 @@ end
 
 i = 0
 
-  for mer in keys(kmercounts_transcriptome_dico)
+@showprogress 10 "k-mer processing... $gene_name" for mer in keys(kmercounts_transcriptome_dico)
 
 #println("-------------------------------------------------------------------------------------------")
 
