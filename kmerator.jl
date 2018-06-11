@@ -3,11 +3,9 @@
 # AUTHOR : Sébastien RIQUIER, IRMB, Montpellier
 
 @everywhere using ParallelDataTransfer
-#using OpenGene
 using ArgParse
 @everywhere using FastaIO
 @everywhere using ProgressMeter
-#using Bio.Seq
 
 
 #Parse argument
@@ -216,17 +214,15 @@ println(readdir("$output/sequences/$kmer_length/"))
 @passobj 1 workers() kmer_length
 @passobj 1 workers() stringent_option
 @passobj 1 workers() admission_threshold
-#@passobj 1 workers() name
-#@passobj 1 workers() name
-#@passobj 1 workers() name
 
 
-#@everywhere function f(splitted_fasta_files, unannotated_option, genome, transcriptome, level, output, kmer_length, stringent_option, admission_threshold)
+#Create the function f for extraction of specifics kmers for one sequence fasta
+#file.
+
 @everywhere function f(splitted_fasta_files)
  
 sleep(myid()*5)
 
-#@parallel for splitted_fasta_files in readdir("$output/sequences/$kmer_length/")
 println("$splitted_fasta_files")
 #println(dico_transcriptome)
 
@@ -243,7 +239,6 @@ println("$splitted_fasta_files")
     transcript_name = "$splitted_fasta_files"
   end
 println("level : $level")
-#tag_file = String()
 if level == "gene"
   tag_file = "$gene_name-$transcript_name-gene_specific.fa"
 end
@@ -255,11 +250,9 @@ if level == "chimera"
 end
 
 
-#FastaWriter("$output/tags/$kmer_length/$tag_file") do fw
 fasta_array = Array([])
 
 
-#@passobj 1 workers() fw
 
 # take the transcript sequence for jellyfish query
 sequence_fasta = "error if seen"
@@ -376,15 +369,12 @@ if level == "transcript"
       i = i+1
               push!(fasta_array,">$gene_name.kmer$i")
               push!(fasta_array,"$mer")
-     # write(fw, [">$gene_name.kmer$i", "$mer"])
 
   elseif float(transcriptome_count) == float(1) && parse(Int, genome_count) <= 1
     i = i+1
               push!(fasta_array,">$gene_name.kmer$i")
               push!(fasta_array,"$mer")
-    #write(fw, [">$gene_name.kmer$i", "$mer"])
   end
-#          writedlm("$output/tags/$kmer_length/$tag_file", transpose(fasta_array), "\n")
  end
 
 if level == "chimera" && unannotated_option == true
@@ -398,7 +388,6 @@ if level == "chimera" && unannotated_option == true
     i = i+1
               push!(fasta_array,">$gene_name.kmer$i")
               push!(fasta_array,"$mer")
-    #write(fw, [">$gene_name.kmer$i", "$mer"])
   end
   end
 
@@ -406,22 +395,10 @@ if level == "chimera" && unannotated_option == true
 end
 println("$level $gene_name : $i specific kmers found")
 
-println("end of function?")
-
 writedlm("$output/tags/$kmer_length/$tag_file", reshape(fasta_array,length(fasta_array)), "\n")
-#end
-#end of sunction
-end
+end #end of function
 splitted_fasta_files = readdir("$output/sequences/$kmer_length/")
-#@everywhere function f(splitted_fasta_files, unannotated_option, genome, transcriptome, level, output, kmer_length, stringent_option, admission_threshold)
 
 #pmap(f, splitted_fasta_files, unannotated_option, genome, transcriptome, level, output, kmer_length, stringent_option, admission_threshold)
 pmap(f, splitted_fasta_files)
 
-#merde(dico_transcriptome)
-
-# SELECT dico FOR ONE GENE
-
-#filter((k,v) -> startswith(k, "$gene_name-"), dico_transcriptome)
-#filter((k,v) -> ismatch(r"CGGCCATACCAGGTTGAATTGGTAAGGAGAGATTATGTTGCAAATGGT", v), dico_transcriptome)
-#length(filter((k,v) -> startswith(k, "$gene_name-"), dico_transcriptome))
