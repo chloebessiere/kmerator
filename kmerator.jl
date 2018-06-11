@@ -5,7 +5,7 @@
 @everywhere using ParallelDataTransfer
 using ArgParse
 @everywhere using FastaIO
-@everywhere using ProgressMeter
+#@everywhere using ProgressMeter
 
 
 #Parse argument
@@ -219,11 +219,28 @@ println(readdir("$output/sequences/$kmer_length/"))
 #Create the function f for extraction of specifics kmers for one sequence fasta
 #file.
 
-@everywhere function f(splitted_fasta_files)
- 
-sleep(myid()*5)
+#print cleared lines used by replace_line function
 
-println("$splitted_fasta_files")
+for _ in 1:nworkers()
+print("\n")
+end
+
+@everywhere function f(splitted_fasta_files)
+#store worker id and X variable, for line replacement (if one core, one line up, if worker 3, 2 lines up)
+if(myid() == 1) X = myid() else X = myid()-1 end
+sleep(2)
+
+
+enlapsed_time = 0
+step_time = 0
+kmers_analysed = 0
+
+
+replace_line = function(nbline::Int64, x::String)
+print(string("\u1b[$(nbline)F\u1b[2K"*"$x"*"\u1b[$(nbline)E"))
+end
+
+#println("$splitted_fasta_files")
 #println(dico_transcriptome)
 
 # manage the name of transcript/gene
@@ -238,7 +255,7 @@ println("$splitted_fasta_files")
     gene_name = "$splitted_fasta_files"
     transcript_name = "$splitted_fasta_files"
   end
-println("level : $level")
+#println("level : $level")
 if level == "gene"
   tag_file = "$gene_name-$transcript_name-gene_specific.fa"
 end
@@ -258,19 +275,22 @@ fasta_array = Array([])
 sequence_fasta = "error if seen"
 FastaReader("$output/sequences/$kmer_length/$splitted_fasta_files") do fr
 for (desc, seq) in fr
-    println("$desc")
+#    println("$desc")
   sequence_fasta = "$seq"
 end
 end
 #println("$sequence_fasta")
 #println("")
 
+remotecall(replace_line, 1 , X, "worker number $(myid()), for $level $gene_name, reporting for duty ! :)\n")
+
 #global genome
   kmercounts_genome = readstring(`jellyfish query -s "$output/sequences/$kmer_length/$splitted_fasta_files" "$genome"`)
-  println("jellyfish query on genome.jf finished")
+remotecall(replace_line, 1 , X, "jellyfish query on genome.jf finished")
   kmercounts_transcriptome = readstring(`jellyfish query -s "$output/sequences/$kmer_length/$splitted_fasta_files" "$transcriptome"`)
 
-  println("jellyfish query on transcriptome.jf finished")
+remotecall(replace_line, 1 , X, "jellyfish query on transcriptome.jf finished")
+#println("jellyfish query on transcriptome.jf finished")
 
 
 
@@ -294,9 +314,23 @@ end
 
 
 
+#initialisation of count variables
 i = 0
+total_kmers = length(keys(kmercounts_transcriptome_dico))
 
-@showprogress 10 "k-mer processing... $gene_name" for mer in keys(kmercounts_transcriptome_dico)
+for mer in keys(kmercounts_transcriptome_dico)
+tic()
+kmers_analysed = kmers_analysed + 1
+per = round(kmers_analysed/total_kmers*100)
+enlapsed_time = enlapsed_time + step_time
+if enlapsed_time == 0
+  time_remaining = 0
+else
+  time_remaining = Integer(round((total_kmers - kmers_analysed)/(kmers_analysed/enlapsed_time)))
+end
+ptime = Dates.canonicalize(Dates.CompoundPeriod(Dates.Second(time_remaining)))
+#println("time : $ptime")  
+remotecall(replace_line, 1 , X, "$level $gene_name : $kmers_analysed kmers analysed,$i specifics,( $per %) :remaining time -> $ptime")
 
 #println("-------------------------------------------------------------------------------------------")
 
@@ -392,10 +426,13 @@ if level == "chimera" && unannotated_option == true
   end
 
 
-end
-println("$level $gene_name : $i specific kmers found")
+step_time = Integer(round(toq()))
+#println("step time : $step_time")
+end # end of kmer analysis
+#println("$level $gene_name : $i specific kmers found")
 
-writedlm("$output/tags/$kmer_length/$tag_file", reshape(fasta_array,length(fasta_array)), "\n")
+writedlm("$output/tags/$kmer_length/$tag_file",
+reshape(fasta_array,length(fasta_array)), "\n")
 end #end of function
 splitted_fasta_files = readdir("$output/sequences/$kmer_length/")
 
