@@ -6,11 +6,23 @@
 using ArgParse
 @everywhere using FastaIO
 #@everywhere using ProgressMeter
-
+using RCall
 
 #Parse argument
 s = ArgParseSettings()
 @add_arg_table s begin
+    "--selection"
+    type = Array
+      help = "list of gene to select directly inside your fasta transcriptome file"
+
+    "--gene-seq"
+      help = "'indicate A gene have multiple possible sequence
+      depending of its variants. this option select the principal transcript of
+      a gene, based of APPRIS database, or simply by Length. If 'APPRIS option
+      and not available data or no principal transcript (non-coding genes), use
+      length instead'"
+    
+    type = String
     "--unannotated", "-u"
       action = :store_true
       help = "activated if the provided initial fasta file correspond to an annotation external from Ensembl. Otherwise, use ensembl fasta files !"
@@ -62,10 +74,18 @@ end
 
 println("output directory: $output")
 
+select_option = parsed_arg["selection"]
+APPRIS_option = parsed_arg["gene_seq"]
+
 
 
 verbose_option = parsed_args["verbose"]
 unannotated_option = parsed_args["unannotated"]
+
+
+if istrue APPRIS_option && (level != "gene" || istrue unannotated_option )
+error("APPRIS option work only with the gene (annotated) level ")
+end
 stringent_option = parsed_args["stringent"]
 if stringent_option == true
 println("stringent: yes")
@@ -103,10 +123,11 @@ end
 if ismatch(r".*\.fa", transcriptome) == true
   println("input fasta (*.fa) file, continue")
 else
-  error("error provided transcriptome : not a fasta file") # necessary ? i don't think so!
+  error("error provided transcriptome : not a fasta file") 
 end
 
 # create dictionary of transcriptome fasta
+println("create dictionary of transcriptome fasta")
 
 
 
@@ -124,6 +145,7 @@ dico_transcriptome["$gene_name-$ensembl_transcript_name"] = seq
 end
 end
 
+println("transcripts_distionarty finished")
 
 #directories creation
 if ! isdir("$output/sequences")
@@ -165,6 +187,70 @@ if ismatch(r".*\.fa", transcriptome) == true
   println("transcriptome kmer index output : $transcriptome")
 end
 
+APPRIS_function = function(gene_ref)
+#gene_ref = "ENSG00000000457"
+url = "http://apprisws.bioinfo.cnio.es/rest/exporter/id/homo_sapiens/" * "$gene_ref" * "?methods=appris&format=json&sc=ensembl"
+println(gene_ref)
+println(url)
+@rput gene_ref url
+
+R"
+start_time = Sys.time()
+library(stringi)
+library(rjson)
+#queryId <- url
+DATA <- fromJSON(file=url)
+if(!exists('DATA')){
+    res = 'NODATA'
+      stop('No answer from APPRIS Database : non-coding RNA requested or no
+      access to the site')
+        }
+        json_data <- function(DATA)
+        {
+            res <- NULL
+              for (i in 1:length(DATA[]))
+                  {
+                      res <- rbind(res, DATA[[i]][c('gene_id', 'end', 'start',
+                      'transcript_id', 'type', 'annotation', 'reliability')])
+                        }
+                          return(res)
+        }
+        res <- as.data.frame(json_data(DATA))
+        principal1 <- subset(res, stri_detect_fixed(res$reliability,
+        'PRINCIPAL:1'))
+        principal2 <- subset(res, stri_detect_fixed(res$reliability,
+        'PRINCIPAL:2'))
+        principal3 <- subset(res, stri_detect_fixed(res$reliability,
+        'PRINCIPAL:3'))
+        principal4 <- subset(res, stri_detect_fixed(res$reliability,
+        'PRINCIPAL:4'))
+        principal5 <- subset(res, stri_detect_fixed(res$reliability,
+        'PRINCIPAL:5'))
+
+if (nrow(principal1) != 0){
+    res <- principal1
+} else if (nrow(principal2) != 0) {
+    res <- principal2
+} else if (nrow(principal3) != 0) {
+    res <- principal3
+} else if (nrow(principal4) != 0) {
+    res <- principal4
+} else {
+    res <- principal5
+}
+
+res$size <- as.integer(res$end) - as.integer(res$start) + 1
+res <- subset(res, res$size == max(res$size))
+res <- unique(res$transcript_id)
+finish_time = Sys.time()
+time = finish_time - start_time"
+    
+appris_res = @rget res time
+res = String(res[1])
+println("APPRIS result : $res")
+println("APPRIS time : $time")
+return(res)
+end # end of APPRIS function
 
 #split each sequence of fasta input file into individual fastas
 # WARNING work only with ensembl fasta descriptions!
@@ -176,18 +262,32 @@ if unannotated_option == false
       gene_name = replace(desc_array[7], "gene_symbol:", "")
       ensembl_transcript_name = desc_array[1]
       ensembl_gene_name = desc_array[4]
-      if length("$seq") >= kmer_length
+      if (!isempty select_option && (gene_name in select_option ||
+        ensembl_transcript_name in select_option || ensembl_gene_name in
+        select_option)) || isempty select_option 
+        # take all sequence corresponding to asked gene names (select option)
+        # take all if select_option not provided
+      if (!isempty APPRIS_option && ensembl_transcript_name ==
+        APPRIS_function(ensembl_gene_name)) || (!isempty APPRIS_option &&
+        APPRIS_function(ensembl_gene_name) == "NODATA" &&
+        ensembl_transcript_name == longer_variant)
+      prinln("$ensembl_transcript_name")
+      prinln(longer_variant)
+
+      if length("$seq") >= kmer_length 
         println("$gene_name-$ensembl_transcript_name : good length, continue")
         FastaWriter("$output/sequences/$kmer_length/$gene_name-$ensembl_transcript_name.fa") do fwsequence
         #for (desc2, seq2) in fr
         write(fwsequence, [">$gene_name-$ensembl_transcript_name", "$seq"])
         end
-
+      
       else println("$gene_name-$ensembl_transcript_name : wrong length, ignored")
       end
     end
     end
-  # if the input fasta is not a part of ensembl annotaion
+    end
+    end
+  # if the input fasta is not a part of ensembl annotation (-u)
   else
     FastaReader("$fastafile") do fr
     for (desc, seq) in fr
@@ -202,7 +302,6 @@ if unannotated_option == false
 end
 end
 println(readdir("$output/sequences/$kmer_length/"))
-
 #println(keys(dico_transcriptome))
 
 @passobj 1 workers() dico_transcriptome
@@ -251,6 +350,18 @@ end
 #    test = filter((k,v) -> startswith(k, "$gene_name-"), dico_transcriptome)
 #    println(test)
     nb_variants = length(filter((k,v) -> startswith(k, "$gene_name-"), dico_transcriptome))
+    variants_dico = filter((k,v) -> startswith(k, "$gene_name-"),
+    dico_transcriptome)
+    variants_lengths = Vector{Any}()
+    for k,v in variants_dico
+      push! (variants_lengths, length(v))
+    end
+
+    longer_variant = split(keys(filter((k,v) -> length(v) ==
+    maximum(variant_lengths))[1]))[2]
+    
+    println($gene_name : longer variant = $longer_variant)
+
   else # if unannotated
     gene_name = "$splitted_fasta_files"
     transcript_name = "$splitted_fasta_files"
