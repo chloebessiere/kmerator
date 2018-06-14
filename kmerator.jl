@@ -2,6 +2,42 @@
 
 # AUTHOR : Sébastien RIQUIER, IRMB, Montpellier
 
+print_with_color(:blue, "                                                       
+                      <((((((\\\\\\
+                     \/      . }\\
+                     ;--..--._|}
+  (\\                 '--/\--'  )
+   \\\\                | '-'  :'|
+    \\\\               . -==- .-|
+     \\\\               \\.__.'   \\--._
+     [\\\\          __.--|       //  _/'--.
+     \\ \\\\       .'-._ ('-----'/ __/      \
+      \\ \\\\     /   __>|      | '--.       |
+       \\ \\\   |   \\   |     /    /       /
+        \\ '\\ /    \\  |     |  _/       /
+         \\  \\       \\ |     | /        /
+          \\\\\\\  \\      \\      _  /   
+ ____  __.                        | |            
+|    |/ _| ___ _ __ _ __ ___  __ _| |_ ___  _ __   
+|      <  | '_ ` _ \\/ _ \\ '__/ _` | __/ _ \\| '__|  
+|    |  \\ | | | | ||  __/ |   (_| | || (_) | |     
+|____|__ \\|_| |_| |_\\___|_|  \\__,_|\\__\\___/|_|     
+        \\/                                              
+-------------------------------------------------- 
+Dependencies : 
+- R + (stringi) & rjson libraries
+- Jellyfish
+- 
+                                                   
+                                                   
+                                                  
+--------------------------------------------------
+")
+
+
+#print_with_color(:orange,intro)
+
+
 @everywhere using ParallelDataTransfer
 using ArgParse
 @everywhere using FastaIO
@@ -11,19 +47,17 @@ using RCall
 #Parse argument
 s = ArgParseSettings()
 @add_arg_table s begin
-    "--selection"
-    type = Array
-      help = "list of gene to select directly inside your fasta transcriptome file"
 
-    "--gene-seq"
-      help = "'indicate A gene have multiple possible sequence
-      depending of its variants. this option select the principal transcript of
-      a gene, based of APPRIS database, or simply by Length. If 'APPRIS option
-      and not available data or no principal transcript (non-coding genes), use
-      length instead'"
-    
-    type = String
-    "--unannotated", "-u"
+"--selection"
+    help = "list of gene to select directly inside your fasta transcriptome file"
+    action = :append_arg 
+    nargs = '*'
+"--appris"
+    help = " indicate : 'homo_sapiens','mus_musculus','rattus_norvegicus','danio_rerio','sus_scrofa','' or virtually any specie available on APPRIS database (Rodriguez JM, Rodriguez-Rivas J, Domenico TD, Vázquez J, Valencia A, and Tress ML. Nucleic Acids Res. Database issue; 2017 Oct 23.).
+    A gene have multiple possible sequence depending of its variants. this option select the principal transcript of a gene, based of APPRIS database, or by length if no data or no connection. If 'APPRIS option and not available data or no principal transcript (non-coding genes), use length instead"
+    arg_type = String
+
+"--unannotated", "-u"
       action = :store_true
       help = "activated if the provided initial fasta file correspond to an annotation external from Ensembl. Otherwise, use ensembl fasta files !"
 
@@ -64,6 +98,9 @@ s = ArgParseSettings()
 end
 parsed_args = parse_args(ARGS, s)
 
+print(parsed_args)
+
+
 # variable attribution
 
 output = parsed_args["output"]
@@ -74,18 +111,18 @@ end
 
 println("output directory: $output")
 
-select_option = parsed_arg["selection"]
-APPRIS_option = parsed_arg["gene_seq"]
-
-
+select_option = parsed_args["selection"]
+select_option = select_option[1]
+APPRIS_option = parsed_args["appris"]
+if APPRIS_option != nothing
+    println("APPRIS selection of principal transcripts for $APPRIS_option" )
+end
 
 verbose_option = parsed_args["verbose"]
 unannotated_option = parsed_args["unannotated"]
 
 
-if istrue APPRIS_option && (level != "gene" || istrue unannotated_option )
-error("APPRIS option work only with the gene (annotated) level ")
-end
+
 stringent_option = parsed_args["stringent"]
 if stringent_option == true
 println("stringent: yes")
@@ -106,9 +143,12 @@ println("input sequences files = $fastafile")
 level = parsed_args["level"]
 println("level of kmer specificity = $level")
 if unannotated_option == true
-println("unannotated: yes")
+println("annotated references : no")
+else
+println("annotated references : yes")
 end
 
+##### Options verification part
 if ! isfile("$genome")
   error("genome not found")
 end
@@ -119,7 +159,30 @@ if ! isfile("$fastafile")
   error("input fasta file not found")
 end
 
+## Ensembl annotation are ENSTXXXX.XX or ENSGXXXXX.XX in ensembl annotation, to avoid bad recognition for selection option,
+## putting annotation like ENSTXXXXX.X for selection is forbidden
+if select_option != nothing
+    for i in select_option
+        println("requested gene : $i")
+        if contains(i, ".") && contains(i, "ENS")
+        error("ensembl annotations with a point like ENSTXXXXXXXX.1 is forbidden, just remove the .1")
+end
+end
+end
+
+
+#println("essais")
+#println(APPRIS_option != nothing)
+#println(level != "gene" || unannotated_option == true)
+if APPRIS_option != nothing && (level != "gene" || unannotated_option == true)
+error("APPRIS option works only with the gene annotated level ")
+end
+
+#####
+
+
 #verif of fasta ensembl annotation
+
 if ismatch(r".*\.fa", transcriptome) == true
   println("input fasta (*.fa) file, continue")
 else
@@ -137,11 +200,16 @@ FastaReader("$transcriptome") do fr
 for (desc, seq) in fr
 desc_array = split(desc)
       # println( desc_array[1])
+if unannotated_option == true
+gene_name = desc
+dico_transcriptome["$gene_name"] = seq
+else
 gene_name = replace(desc_array[7], "gene_symbol:", "")
-ensembl_transcript_name = desc_array[1]
-ensembl_gene_name = desc_array[4]
+ensembl_transcript_name = split(desc_array[1],'.')[1]
+ensembl_gene_name = split(replace(desc_array[4], "gene:",""), '.')[1]
+dico_transcriptome["$gene_name:$ensembl_transcript_name"] = seq
+end
 
-dico_transcriptome["$gene_name-$ensembl_transcript_name"] = seq
 end
 end
 
@@ -189,7 +257,7 @@ end
 
 APPRIS_function = function(gene_ref)
 #gene_ref = "ENSG00000000457"
-url = "http://apprisws.bioinfo.cnio.es/rest/exporter/id/homo_sapiens/" * "$gene_ref" * "?methods=appris&format=json&sc=ensembl"
+url = "http://apprisws.bioinfo.cnio.es/rest/exporter/id/"*"$APPRIS_option"*"/" * "$gene_ref" * "?methods=appris&format=json&sc=ensembl"
 println(gene_ref)
 println(url)
 @rput gene_ref url
@@ -252,6 +320,30 @@ println("APPRIS time : $time")
 return(res)
 end # end of APPRIS function
 
+find_longer_variant = function(gene_name, dico_transcriptome)
+
+    nb_variants = length(filter((k,v) -> startswith(k, "$gene_name:"), dico_transcriptome))
+    println("nb variants : $nb_variants")
+    variants_dico = filter((k,v) -> startswith(k, "$gene_name:"), dico_transcriptome)
+    println("variants dico : $variants_dico")
+    variants_lengths = Vector{Any}()
+    for (k,v) in variants_dico
+        println(k)
+        println(v)
+      push!(variants_lengths, length(v))
+    end
+
+    longer_variant = split(keys(filter((k,v) -> length(v) == maximum(variants_lengths),variants_dico)[1]))[2]
+    
+    println("$gene_name : longer variant = $longer_variant")
+    return($longer_variant)
+end
+
+
+
+
+
+
 #split each sequence of fasta input file into individual fastas
 # WARNING work only with ensembl fasta descriptions!
 if unannotated_option == false
@@ -260,28 +352,30 @@ if unannotated_option == false
       desc_array = split(desc)
       #println( desc_array[1])
       gene_name = replace(desc_array[7], "gene_symbol:", "")
-      ensembl_transcript_name = desc_array[1]
-      ensembl_gene_name = desc_array[4]
-      if (!isempty select_option && (gene_name in select_option ||
-        ensembl_transcript_name in select_option || ensembl_gene_name in
-        select_option)) || isempty select_option 
-        # take all sequence corresponding to asked gene names (select option)
+      ensembl_transcript_name = split(desc_array[1],'.')[1]
+      ensembl_gene_name = split(replace(desc_array[4], "gene:",""), '.')[1]
+      #println("ensembl gene name : $ensembl_gene_name")
+      #println("ensembl transcript name : $ensembl_transcript_name")
+      #println("gene name : $gene_name")
+      #println("ensembl gene name : $(split(ensembl_gene_name, '.'))[1]")
+      #println("test to see if gene name in list")
+      if select_option == nothing || (select_option != nothing && (gene_name in select_option || ensembl_transcript_name in select_option || ensembl_gene_name in select_option))         # take all sequence corresponding to asked gene names (select option)
         # take all if select_option not provided
-      if (!isempty APPRIS_option && ensembl_transcript_name ==
-        APPRIS_function(ensembl_gene_name)) || (!isempty APPRIS_option &&
-        APPRIS_function(ensembl_gene_name) == "NODATA" &&
-        ensembl_transcript_name == longer_variant)
-      prinln("$ensembl_transcript_name")
-      prinln(longer_variant)
+        if(APPRIS_option != nothing) 
+        APPRIS_transcript = APPRIS_function(ensembl_gene_name) 
+        println("APPRIS selected variant : $APPRIS_transcript")
+        end
+      if APPRIS_option == nothing || (APPRIS_option != nothing && ensembl_transcript_name == APPRIS_transcript) || (APPRIS_option != nothing && APPRIS_transcript == "NODATA" && ensembl_transcript_name == find_longer_variant(gene_name,dico_transcriptome))
+      println("$ensembl_transcript_name")
 
       if length("$seq") >= kmer_length 
-        println("$gene_name-$ensembl_transcript_name : good length, continue")
-        FastaWriter("$output/sequences/$kmer_length/$gene_name-$ensembl_transcript_name.fa") do fwsequence
+        println("$gene_name:$ensembl_transcript_name : good length, continue")
+        FastaWriter("$output/sequences/$kmer_length/$gene_name:$ensembl_transcript_name.fa") do fwsequence
         #for (desc2, seq2) in fr
-        write(fwsequence, [">$gene_name-$ensembl_transcript_name", "$seq"])
+        write(fwsequence, [">$gene_name:$ensembl_transcript_name", "$seq"])
         end
       
-      else println("$gene_name-$ensembl_transcript_name : wrong length, ignored")
+      else println("$gene_name:$ensembl_transcript_name : wrong length, ignored")
       end
     end
     end
@@ -344,23 +438,25 @@ end
 
 # manage the name of transcript/gene
   if unannotated_option == false # if annotated
-    gene_name = split(splitted_fasta_files, "-")[1]
+    gene_name = split(splitted_fasta_files, ":")[1]
 #    println("$gene_name")
-    transcript_name = split(splitted_fasta_files, "-")[2]
-#    test = filter((k,v) -> startswith(k, "$gene_name-"), dico_transcriptome)
+    transcript_name = split(splitted_fasta_files, ":")[2]
+#    test = filter((k,v) -> startswith(k, "$gene_name:"), dico_transcriptome)
 #    println(test)
-    nb_variants = length(filter((k,v) -> startswith(k, "$gene_name-"), dico_transcriptome))
-    variants_dico = filter((k,v) -> startswith(k, "$gene_name-"),
-    dico_transcriptome)
-    variants_lengths = Vector{Any}()
-    for k,v in variants_dico
-      push! (variants_lengths, length(v))
-    end
+    nb_variants = length(filter((k,v) -> startswith(k, "$gene_name:"), dico_transcriptome))
+#    println("nb variants : $nb_variants")
+    variants_dico = filter((k,v) -> startswith(k, "$gene_name:"), dico_transcriptome)
+    #println("variants dico : $variants_dico")
+#    variants_lengths = Vector{Any}()
+#    for (k,v) in variants_dico
+#        println(k)
+#        println(v)
+#      push!(variants_lengths, length(v))
+#    end
 
-    longer_variant = split(keys(filter((k,v) -> length(v) ==
-    maximum(variant_lengths))[1]))[2]
+#    longer_variant = split(keys(filter((k,v) -> length(v) == maximum(variants_lengths),variants_dico)[1]))[2]
     
-    println($gene_name : longer variant = $longer_variant)
+    #println("$gene_name : longer variant = $longer_variant")
 
   else # if unannotated
     gene_name = "$splitted_fasta_files"
@@ -479,7 +575,7 @@ if level == "gene"
               push!(fasta_array,"$mer")
               #write(fw, [">$gene_name-$transcript_name.kmer$i ($tmp/$nb_variants)", "$mer"])
 
-          elseif stringent_option == false && all(x->startswith(x, "$gene_name-"), transcripts_containing_this_kmer) == true && float(transcriptome_count) > float(nb_variants*admission_threshold)
+          elseif stringent_option == false && all(x->startswith(x, "$gene_name:"), transcripts_containing_this_kmer) == true && float(transcriptome_count) > float(nb_variants*admission_threshold)
 
                 #println("specific kmer found")
                 i = i+1
