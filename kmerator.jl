@@ -561,35 +561,27 @@ if level == "gene"
          #println("genome count : $genome_count")
           if genome_count == "1" || genome_count == "0"#if the kmer is present/unique or does not exist (splicing?) on the genome
             mer_regex = Regex(mer)
-            transcripts_containing_this_kmer = keys(filter((k,v) -> ismatch(mer_regex, v), dico_transcriptome))
-            #if nb_variants != length(transcripts_containing_this_kmer)
-                #println("$mer : not equal : transcriptome count $transcriptome_count variant number $nb_variants & transcripts_with this kmer $transcripts_containing_this_kmer")
-            #end
-            #println(" number_variants = $nb_variants")
-            #println(transcripts_containing_this_kmer)
-            if stringent_option == true && float(transcriptome_count) == float(nb_variants) == float(length(transcripts_containing_this_kmer))
+            variants_containing_this_kmer = keys(filter((k,v) -> ismatch(mer_regex, v), variants_dico))
+            if stringent_option == true && float(transcriptome_count) == float(nb_variants) == float(length(variants_containing_this_kmer)) 
                 #println("specific kmer found !")
               i = i+1
-                tmp = length(transcripts_containing_this_kmer)
+                tmp = length(variants_containing_this_kmer)
               push!(fasta_array,">$gene_name-$transcript_name.kmer$i ($tmp/$nb_variants)")
               push!(fasta_array,"$mer")
-              #write(fw, [">$gene_name-$transcript_name.kmer$i ($tmp/$nb_variants)", "$mer"])
 
-          elseif stringent_option == false && all(x->startswith(x, "$gene_name:"), transcripts_containing_this_kmer) == true && float(transcriptome_count) > float(nb_variants*admission_threshold)
+          elseif stringent_option == false && float(transcriptome_count) == float(length(variants_containing_this_kmer)) && float(transcriptome_count) > float(nb_variants*admission_threshold)
 
                 #println("specific kmer found")
                 i = i+1
-                tmp = length(transcripts_containing_this_kmer)
+                tmp = length(variants_containing_this_kmer)
               push!(fasta_array,">$gene_name-$transcript_name.kmer$i ($tmp/$nb_variants)" )
               push!(fasta_array, "$mer")
-              #write(fw, [">$gene_name-$transcript_name.kmer$i ($tmp/$nb_variants)", "$mer"])
 
             elseif unannotated_option == true && float(transcriptome_count) == float(0)
 
               i = i+1
               push!(fasta_array,">$gene_name-$transcript_name.kmer$i" )
               push!(fasta_array,"$mer")
-              #write(fw, [">$gene_name-$transcript_name.kmer$i", "$mer"])
 
           end #end of fasta writing function
         
@@ -597,7 +589,6 @@ if level == "gene"
  #         writedlm("$output/tags/$kmer_length/$tag_file", transpose(fasta_array), "\n")
         end
   end
-
 
 
   #println("$genome_count")
