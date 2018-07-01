@@ -362,7 +362,7 @@ if unannotated_option == false
       #println("gene name : $gene_name")
       #println("ensembl gene name : $(split(ensembl_gene_name, '.'))[1]")
       #println("test to see if gene name in list")
-      if select_option == nothing || (select_option != nothing && (gene_name in select_option || ensembl_transcript_name in select_option || ensembl_gene_name in select_option))         # take all sequence corresponding to asked gene names (select option)
+      if isempty(select_option) || (select_option != nothing && (gene_name in select_option || ensembl_transcript_name in select_option || ensembl_gene_name in select_option))         # take all sequence corresponding to asked gene names (select option)
         # take all if select_option not provided
         if(APPRIS_option != nothing) 
         APPRIS_transcript = APPRIS_function(ensembl_gene_name) 
