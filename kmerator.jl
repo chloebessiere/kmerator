@@ -112,7 +112,10 @@ end
 println("output directory: $output")
 
 select_option = parsed_args["selection"]
+println(select_option)
+if !isempty(select_option)
 select_option = select_option[1]
+end
 APPRIS_option = parsed_args["appris"]
 if APPRIS_option != nothing
     println("APPRIS selection of principal transcripts for $APPRIS_option" )
