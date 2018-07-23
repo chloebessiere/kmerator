@@ -9,9 +9,9 @@ Kmerator strictly depends of an Ensembl Annotation, you can find it there : http
 You’ll need a genome and a transcriptome, fasta format. You can reuse the jellyfish of the genome in the options. 
 
 Interpretations of counts will differ, depending of the “level” option : 
--gene 
--transcript 
--chimeras (must not be fount in your reference, genome or transcriptome)
+- gene 
+- transcript 
+- chimeras (must not be fount in your reference, genome or transcriptome)
 
 ## Dependencies :
 
@@ -25,13 +25,17 @@ Pkg.add(“RCall”) (temporary dependency, will be removed in next version)
 - R + (stringi) & rjson libraries (temporary dependency, will be removed in next version)
 - Jellyfish 2.0
 
+
 ## Usage
+```
 julia -p [nb-threads] kmerator.jl [--selection [SELECTION...]] [--appris APPRIS] [-u]
                    [-s] [-v] -g GENOME -t TRANSCRIPTOME -l LEVEL
                    [-o OUTPUT] [--length LENGTH]
                    [--threshold THRESHOLD] fasta_file
+```
 
 ## arguments
+```
   --selection [SELECTION...]
                         list of gene to select directly inside your
                         fasta transcriptome file (ENST, ENSG, official_symbol)
@@ -73,4 +77,4 @@ julia -p [nb-threads] kmerator.jl [--selection [SELECTION...]] [--appris APPRIS]
                         admit a tag (default 0.5) (default: 0.5)
   -h, --help            show this help message and exit
 
-
+```
