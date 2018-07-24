@@ -528,7 +528,27 @@ end
 i = 0
 total_kmers = length(keys(kmercounts_transcriptome_dico))
 
+## create a new dictionary containing starts of kmers coordinates, to index
+#kmers by their place on the sequence
+kmer_starts = Dict()
+kmer_placed = 0
+#println("start processing kmer place on input sequence")
+total_kmer_number = length(keys(kmercounts_transcriptome_dico))
 for mer in keys(kmercounts_transcriptome_dico)
+kmer_placed = kmer_placed +1
+
+remotecall(replace_line, 1 , X, "kmers placed = $kmer_placed on $total_kmer_number")
+kmer_interval = search("$sequence_fasta", "$mer")
+kmer_start = minimum(collect(kmer_interval))
+#kmer_end = maximum(collect(kmer_interval))
+kmer_starts["$mer"] = kmer_start
+end
+
+#for mer in keys(kmercounts_transcriptome_dico)
+for tuple in sort(collect(zip(values(kmer_starts),keys(kmer_starts))))
+##for now, I can only have a sorted array of tuples, I have to extract sequence
+#for each tuple
+mer = last(tuple)
 tic()
 kmers_analysed = kmers_analysed + 1
 per = round(kmers_analysed/total_kmers*100)
