@@ -1,4 +1,4 @@
-#!/bin/julia
+#!/usr/bin/env julia
 
 # AUTHOR : Sébastien RIQUIER, IRMB, Montpellier
 
