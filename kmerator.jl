@@ -269,7 +269,12 @@ R"
 start_time = Sys.time()
 library(stringi)
 library(rjson)
+library(RCurl)
+
 #queryId <- url
+if(url.exists(url) == TRUE){
+
+
 DATA <- fromJSON(file=url)
 if(!exists('DATA')){
     res = 'NODATA'
@@ -284,6 +289,8 @@ if(!exists('DATA')){
                       res <- rbind(res, DATA[[i]][c('gene_id', 'end', 'start',
                       'transcript_id', 'type', 'annotation', 'reliability')])
                         }
+                        colnames(res) = c('gene_id', 'end', 'start',
+                            'transcript_id', 'type', 'annotation', 'reliability')
                           return(res)
         }
         res <- as.data.frame(json_data(DATA))
@@ -314,10 +321,21 @@ res$size <- as.integer(res$end) - as.integer(res$start) + 1
 res <- subset(res, res$size == max(res$size))
 res <- unique(res$transcript_id)
 finish_time = Sys.time()
-time = finish_time - start_time"
-    
+time = finish_time - start_time
+
+} else{
+  res = 'NODATA'
+  finish_time = Sys.time()
+  time = finish_time - start_time
+}
+"
+
 appris_res = @rget res time
+# if worked
+if res != "NODATA"
 res = String(res[1])
+end
+
 println("APPRIS result : $res")
 println("APPRIS time : $time")
 return(res)
@@ -335,11 +353,15 @@ find_longer_variant = function(gene_name, dico_transcriptome)
         println(v)
       push!(variants_lengths, length(v))
     end
-
-    longer_variant = split(keys(filter((k,v) -> length(v) == maximum(variants_lengths),variants_dico)[1]))[2]
+    
+    println("variants lengths : $variants_lengths")
+    #println(maximum(variants_lengths))
+    #println(String(keys(filter((k,v) -> length(v) == maximum(variants_lengths),variants_dico)[1])))
+    longer_variant = String(collect(keys(filter((k,v) -> length(v) == maximum(variants_lengths),variants_dico)))[1])
+    #longer_variant = split(keys(filter((k,v) -> length(v) == maximum(variants_lengths),variants_dico)[1])[1])[2]
     
     println("$gene_name : longer variant = $longer_variant")
-    return($longer_variant)
+    return(longer_variant)
 end
 
 
@@ -368,9 +390,12 @@ if unannotated_option == false
         APPRIS_transcript = APPRIS_function(ensembl_gene_name) 
         println("APPRIS selected variant : $APPRIS_transcript")
         end
-      if APPRIS_option == nothing || (APPRIS_option != nothing && ensembl_transcript_name == APPRIS_transcript) || (APPRIS_option != nothing && APPRIS_transcript == "NODATA" && ensembl_transcript_name == find_longer_variant(gene_name,dico_transcriptome))
+        #find_longer_variant(gene_name,dico_transcriptome)
+        println("$ensembl_transcript_name")
+        println("$gene_name")
+        #println("$gene_name:$ensembl_transcript_name" == find_longer_variant(gene_name,dico_transcriptome))
+      if APPRIS_option == nothing || (APPRIS_option != nothing && ensembl_transcript_name == APPRIS_transcript) || (APPRIS_option != nothing && APPRIS_transcript == "NODATA" && "$gene_name:$ensembl_transcript_name" == find_longer_variant(gene_name,dico_transcriptome))
       println("$ensembl_transcript_name")
-
       if length("$seq") >= kmer_length 
         println("$gene_name:$ensembl_transcript_name : good length, continue")
         FastaWriter("$output/sequences/$kmer_length/$gene_name:$ensembl_transcript_name.fa") do fwsequence
