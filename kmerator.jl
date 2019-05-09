@@ -2,21 +2,7 @@
 
 # AUTHOR : Sébastien RIQUIER, IRMB, Montpellier
 
-print_with_color(:blue, "                                                       
-                      <((((((\\\\\\
-                     \/      . }\\
-                     ;--..--._|}
-  (\\                 '--/\--'  )
-   \\\\                | '-'  :'|
-    \\\\               . -==- .-|
-     \\\\               \\.__.'   \\--._
-     [\\\\          __.--|       //  _/'--.
-     \\ \\\\       .'-._ ('-----'/ __/      \
-      \\ \\\\     /   __>|      | '--.       |
-       \\ \\\   |   \\   |     /    /       /
-        \\ '\\ /    \\  |     |  _/       /
-         \\  \\       \\ |     | /        /
-          \\\\\\\  \\      \\      _  /   
+print("                                                       
  ____  __.                        | |            
 |    |/ _| ___ _ __ _ __ ___  __ _| |_ ___  _ __   
 |      <  | '_ ` _ \\/ _ \\ '__/ _` | __/ _ \\| '__|  
@@ -27,18 +13,13 @@ print_with_color(:blue, "
 Dependencies : 
 - R + (stringi) & rjson libraries
 - Jellyfish
-- 
-                                                   
-                                                   
-                                                  
---------------------------------------------------
-")
+--------------------------------------------------")
 
 
 #print_with_color(:orange,intro)
 
 
-@everywhere using ParallelDataTransfer
+#@everywhere using ParallelDataTransfer
 using ArgParse
 @everywhere using FastaIO
 #@everywhere using ProgressMeter
