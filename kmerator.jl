@@ -20,7 +20,7 @@ Dependencies :
 
 
 #@everywhere using ParallelDataTransfer
-using ArgParse
+using Distributed
 @everywhere using FastaIO
 #@everywhere using ProgressMeter
 using RCall
