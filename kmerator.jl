@@ -17,13 +17,35 @@ Dependencies :
 
 
 #print_with_color(:orange,intro)
-
+using Pkg
 
 #@everywhere using ParallelDataTransfer
+if haskey(Pkg.installed(), "Distributed") using Distributed 
+else 
+Pkg.add("Distributed") 
 using Distributed
-@everywhere using FastaIO
+end
+
+if haskey(Pkg.installed(), "ArgParse") using ArgParse
+else 
+Pkg.add("ArgParse") 
+using ArgParse
+end
+
+if haskey(Pkg.installed(), "FastaIO") 
+@everywhere using FastaIO 
+else 
+Pkg.add("FastaIO") 
+using FastaIO
+end
+
 #@everywhere using ProgressMeter
-using RCall
+
+if haskey(Pkg.installed(), "RCall") using RCall 
+else Pkg.add("RCall") 
+using RCall  
+end
+
 
 #Parse argument
 s = ArgParseSettings()
