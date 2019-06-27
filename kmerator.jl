@@ -25,6 +25,13 @@ else
 Pkg.add("Distributed") 
 using Distributed
 end
+if haskey(Pkg.installed(), "ParallelDataTransfer") using  ParallelDataTransfer
+else 
+Pkg.add("ParallelDataTransfer") 
+using ParallelDataTransfer
+end
+
+
 
 if haskey(Pkg.installed(), "ArgParse") using ArgParse
 else 
@@ -655,7 +662,7 @@ if level == "transcript"
 
   elseif float(transcriptome_count) == float(1) && parse(Int, genome_count) <= 1
     i = i+1
-              push!(fasta_array,">$gene_name.kmer$i")
+              push!(fasta_array,">$gene_name-$transcript_name.kmer$i")
               push!(fasta_array,"$mer")
   end
  end
