@@ -639,10 +639,10 @@ remotecall(replace_line, 1 , X, "worker number $(myid()), for $level $gene_name,
 
 #global genome
   kmercounts_genome = readstring(`jellyfish query -s "$output/sequences/$kmer_length/$splitted_fasta_files" "$genome"`)
-remotecall(replace_line, 1 , X, "jellyfish query on genome.jf finished")
+remotecall(replace_line, 1 , X, "jellyfish query on genome.jl finished")
   kmercounts_transcriptome = readstring(`jellyfish query -s "$output/sequences/$kmer_length/$splitted_fasta_files" "$transcriptome"`)
 
-remotecall(replace_line, 1 , X, "jellyfish query on transcriptome.jf finished")
+remotecall(replace_line, 1 , X, "jellyfish query on transcriptome.jl finished")
 #println("jellyfish query on transcriptome.jf finished")
 
 
