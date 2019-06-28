@@ -19,6 +19,18 @@ Dependencies :
 #print_with_color(:orange,intro)
 using Pkg
 
+if haskey(Pkg.installed(), "HTTP") using HTTP
+else 
+Pkg.add("HTTP") 
+using HTTP
+end
+
+if haskey(Pkg.installed(), "JSON") using JSON
+else 
+Pkg.add("JSON") 
+using JSON
+end
+
 #@everywhere using ParallelDataTransfer
 if haskey(Pkg.installed(), "Distributed") using Distributed 
 else 
@@ -48,10 +60,10 @@ end
 
 #@everywhere using ProgressMeter
 
-if haskey(Pkg.installed(), "RCall") using RCall 
-else Pkg.add("RCall") 
-using RCall  
-end
+#if haskey(Pkg.installed(), "RCall") using RCall 
+#else Pkg.add("RCall") 
+#using RCall  
+#end
 
 
 #Parse argument
@@ -270,81 +282,153 @@ end
 
 APPRIS_function = function(gene_ref)
 #gene_ref = "ENSG00000000457"
-url = "http://apprisws.bioinfo.cnio.es/rest/exporter/id/"*"$APPRIS_option"*"/" * "$gene_ref" * "?methods=appris&format=json&sc=ensembl"
-println(gene_ref)
-println(url)
-@rput gene_ref url
+#url = "http://apprisws.bioinfo.cnio.es/rest/exporter/id/"*"$APPRIS_option"*"/" * "$gene_ref" * "?methods=appris&format=json&sc=ensembl"
+#println(gene_ref)
+#println(url)
+#@rput gene_ref url
 
-R"
-start_time = Sys.time()
-library(stringi)
-library(rjson)
-library(RCurl)
+# Initial R function
+#R"
+#start_time = Sys.time()
+#library(stringi)
+#library(rjson)
+#library(RCurl)
+#
+##queryId <- url
+#if(url.exists(url) == TRUE){
+#
+#
+#DATA <- fromJSON(file=url)
+#if(!exists('DATA')){
+#    res = 'NODATA'
+#      stop('No answer from APPRIS Database : non-coding RNA requested or no
+#      access to the site')
+#        }
+#        json_data <- function(DATA)
+#        {
+#            res <- NULL
+#              for (i in 1:length(DATA[]))
+#                  {
+#                      res <- rbind(res, DATA[[i]][c('gene_id', 'end', 'start',
+#                      'transcript_id', 'type', 'annotation', 'reliability')])
+#                        }
+#                        colnames(res) = c('gene_id', 'end', 'start',
+#                            'transcript_id', 'type', 'annotation', 'reliability')
+#                          return(res)
+#        }
+#        res <- as.data.frame(json_data(DATA))
+#        principal1 <- subset(res, stri_detect_fixed(res$reliability,
+#        'PRINCIPAL:1'))
+#        principal2 <- subset(res, stri_detect_fixed(res$reliability,
+#        'PRINCIPAL:2'))
+#        principal3 <- subset(res, stri_detect_fixed(res$reliability,
+#        'PRINCIPAL:3'))
+#        principal4 <- subset(res, stri_detect_fixed(res$reliability,
+#        'PRINCIPAL:4'))
+#        principal5 <- subset(res, stri_detect_fixed(res$reliability,
+#        'PRINCIPAL:5'))
+#
+#if (nrow(principal1) != 0){
+#    res <- principal1
+#} else if (nrow(principal2) != 0) {
+#    res <- principal2
+#} else if (nrow(principal3) != 0) {
+#    res <- principal3
+#} else if (nrow(principal4) != 0) {
+#    res <- principal4
+#} else {
+#    res <- principal5
+#}
+#
+#res$size <- as.integer(res$end) - as.integer(res$start) + 1
+#res <- subset(res, res$size == max(res$size))
+#res <- unique(res$transcript_id)
+#finish_time = Sys.time()
+#time = finish_time - start_time
+#
+#} else{
+#  res = 'NODATA'
+#  finish_time = Sys.time()
+#  time = finish_time - start_time
+#}
+#"
 
-#queryId <- url
-if(url.exists(url) == TRUE){
 
 
-DATA <- fromJSON(file=url)
-if(!exists('DATA')){
-    res = 'NODATA'
-      stop('No answer from APPRIS Database : non-coding RNA requested or no
-      access to the site')
-        }
-        json_data <- function(DATA)
-        {
-            res <- NULL
-              for (i in 1:length(DATA[]))
-                  {
-                      res <- rbind(res, DATA[[i]][c('gene_id', 'end', 'start',
-                      'transcript_id', 'type', 'annotation', 'reliability')])
-                        }
-                        colnames(res) = c('gene_id', 'end', 'start',
-                            'transcript_id', 'type', 'annotation', 'reliability')
-                          return(res)
-        }
-        res <- as.data.frame(json_data(DATA))
-        principal1 <- subset(res, stri_detect_fixed(res$reliability,
-        'PRINCIPAL:1'))
-        principal2 <- subset(res, stri_detect_fixed(res$reliability,
-        'PRINCIPAL:2'))
-        principal3 <- subset(res, stri_detect_fixed(res$reliability,
-        'PRINCIPAL:3'))
-        principal4 <- subset(res, stri_detect_fixed(res$reliability,
-        'PRINCIPAL:4'))
-        principal5 <- subset(res, stri_detect_fixed(res$reliability,
-        'PRINCIPAL:5'))
+##### APPRIS JULIA FUNCTION #####
 
-if (nrow(principal1) != 0){
-    res <- principal1
-} else if (nrow(principal2) != 0) {
-    res <- principal2
-} else if (nrow(principal3) != 0) {
-    res <- principal3
-} else if (nrow(principal4) != 0) {
-    res <- principal4
-} else {
-    res <- principal5
-}
 
-res$size <- as.integer(res$end) - as.integer(res$start) + 1
-res <- subset(res, res$size == max(res$size))
-res <- unique(res$transcript_id)
-finish_time = Sys.time()
-time = finish_time - start_time
+url = "http://apprisws.bioinfo.cnio.es/rest/exporter/id/"*"$APPRIS_option"*"/" *
+"$gene_ref" * "?methods=appris&format=json&sc=ensembl"
+#make_API_call(url)
+function HTTPTEST(url)
+  try
+    r = HTTP.request("GET", "$url"; verbose=0)
+    res = String(r.body)
+    res = JSON.Parser.parse(res)
+    
+    println(res)
 
-} else{
-  res = 'NODATA'
-  finish_time = Sys.time()
-  time = finish_time - start_time
-}
-"
-
-appris_res = @rget res time
-# if worked
-if res != "NODATA"
-res = String(res[1])
+    return res
+  catch err
+    error_message = "ERROR:\n $err"
+    res = "NODATA"
+    return err
+  end
 end
+
+
+
+test = HTTPTEST(url)
+println("type of response : $(typeof(test))")
+#test = r
+#println("$test")
+#r2 = String(r.body)
+#json = JSON.parse(r2)
+
+#println(json)
+
+#println(isempty(json))
+toto = []
+for i in 1:length(test)
+  try push!(toto, test[i]["reliability"]) catch end
+end
+
+toto = filter(x -> occursin("PRINCIPAL:", x), toto)
+
+if isempty(toto)
+  println("No principal isoforms detected, abort")
+end
+
+toto2 = []
+
+for i in 1:length(toto) push!(toto2, split(toto[i],":")[2]) end
+
+toto2 = map(x-> parse(Int, x), toto2)
+level = minimum(toto2)
+
+toto3 = hcat(map(x -> try x["transcript_id"] catch end, test),map(x -> try parse(Int, x["length_na"]) catch end, test),  map(x -> try x["reliability"] catch end, test))
+
+toto3 = toto3[map(x -> x != nothing, toto3[:, 3]), :]
+toto3 = toto3[map(x -> occursin("PRINCIPAL:$level",x), toto3[:, 3]), :]
+
+#toto3 = hcat(toto3,toto3[:,3]-toto3[:,2]+1)
+max_length = maximum(toto3[:,2])
+
+toto3 = toto3[map(x -> x == max_length, toto3[:, 2]), :]
+res= String( unique(toto3[:,1])[1])
+
+
+#println("APPRIS result : $res")
+
+
+
+
+#appris_res = @rget res time
+# if worked
+#if res != "NODATA"
+#res = String(res[1])
+#end
 
 println("APPRIS result : $res")
 println("APPRIS time : $time")
@@ -698,4 +782,5 @@ splitted_fasta_files = readdir("$output/sequences/$kmer_length/")
 
 #pmap(f, splitted_fasta_files, unannotated_option, genome, transcriptome, level, output, kmer_length, stringent_option, admission_threshold)
 pmap(f, splitted_fasta_files)
+
 
