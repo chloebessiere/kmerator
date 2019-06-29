@@ -114,7 +114,7 @@ s = ArgParseSettings()
 
     "--threshold"
         help = "FOR GENE LEVEL ONLY : Minimum fraction of annotated transcripts containing this kmer to admit it (default 0.5)"
-        default = 0.5
+        default = 0
         arg_type = Float64
 end
 parsed_args = parse_args(ARGS, s)
