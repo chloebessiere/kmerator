@@ -10,13 +10,36 @@ print("
 |____|__ \\|_| |_| |_\\___|_|  \\__,_|\\__\\___/|_|     
         \\/                                              
 -------------------------------------------------- 
-Dependencies : 
+		  VERSION v0.1.0
+
+Dependencies :
+- Julia language >= v1.1
 - Jellyfish >= v2.0
 --------------------------------------------------")
 
 
 #print_with_color(:orange,intro)
+
+
 using Pkg
+
+
+#@everywhere using ParallelDataTransfer
+if haskey(Pkg.installed(), "Distributed") using Distributed 
+else 
+Pkg.add("Distributed") 
+using Distributed
+end
+if haskey(Pkg.installed(), "ParallelDataTransfer") using  ParallelDataTransfer
+else 
+Pkg.add("ParallelDataTransfer") 
+using ParallelDataTransfer
+end
+
+
+
+@everywhere using Dates
+@everywhere using DelimitedFiles
 
 if haskey(Pkg.installed(), "HTTP") using HTTP
 else 
@@ -30,17 +53,6 @@ Pkg.add("JSON")
 using JSON
 end
 
-#@everywhere using ParallelDataTransfer
-if haskey(Pkg.installed(), "Distributed") using Distributed 
-else 
-Pkg.add("Distributed") 
-using Distributed
-end
-if haskey(Pkg.installed(), "ParallelDataTransfer") using  ParallelDataTransfer
-else 
-Pkg.add("ParallelDataTransfer") 
-using ParallelDataTransfer
-end
 
 
 
@@ -113,8 +125,8 @@ s = ArgParseSettings()
         required = true
 
     "--threshold"
-        help = "FOR GENE LEVEL ONLY : Minimum fraction of annotated transcripts containing this kmer to admit it (default 0.5)"
-        default = 0
+        help = "FOR GENE LEVEL ONLY : Minimum fraction of annotated transcripts containing this kmer to admit it (default 0)"
+        default = 0.5
         arg_type = Float64
 end
 parsed_args = parse_args(ARGS, s)
@@ -125,8 +137,8 @@ print(parsed_args)
 # variable attribution
 
 output = parsed_args["output"]
-if ismatch(r"\/$", output)
-  output = replace(output, r"/$", "")
+if occursin(r"\/$", output)
+  output = replace(output, r"/$" => "")
 end
 
 
@@ -188,7 +200,7 @@ end
 if select_option != nothing
     for i in select_option
         println("requested gene : $i")
-        if contains(i, ".") && contains(i, "ENS")
+        if occursin(".", i) && occursin("ENS", i)
         error("ensembl annotations with a point like ENSTXXXXXXXX.1 is forbidden, just remove the .1")
 end
 end
@@ -207,7 +219,7 @@ end
 
 #verif of fasta ensembl annotation
 
-if ismatch(r".*\.fa", transcriptome) == true
+if occursin(r".*\.fa", transcriptome) == true
   println("input fasta (*.fa) file, continue")
 else
   error("error provided transcriptome : not a fasta file") 
@@ -228,9 +240,9 @@ if unannotated_option == true
 gene_name = desc
 dico_transcriptome["$gene_name"] = seq
 else
-gene_name = replace(desc_array[7], "gene_symbol:", "")
+gene_name = replace(desc_array[7], "gene_symbol:" => "")
 ensembl_transcript_name = split(desc_array[1],'.')[1]
-ensembl_gene_name = split(replace(desc_array[4], "gene:",""), '.')[1]
+ensembl_gene_name = split(replace(desc_array[4], "gene:" => ""), '.')[1]
 dico_transcriptome["$gene_name:$ensembl_transcript_name"] = seq
 end
 
@@ -261,21 +273,21 @@ end
 
 
 #verif of fasta file
-if ismatch(r".*\.fa", fastafile) == true
+if occursin(r".*\.fa", fastafile) == true
   println("input fasta (*.fa) file, continue")
 else
   error("input : not a fasta file")
 end
 
 #verif of genome/transcriptome are fasta, do the jellyfish count in this case
-if ismatch(r".*\.fa", genome) == true
-  run(`jellyfish count -C -m $kmer_length -s 10000 -t $nbthreads -o $output/jellyfish_indexes/$kmer_length/$(replace(basename(genome), ".fa", ".jl")) $genome`)
-  genome = "$output/jellyfish_indexes/$kmer_length/$(replace(basename(genome), ".fa", ".jl"))"
+if occursin(r".*\.fa", genome) == true
+  run(`jellyfish count -C -m $kmer_length -s 10000 -t $nbthreads -o $output/jellyfish_indexes/$kmer_length/$(replace(basename(genome), ".fa" => ".jl")) $genome`)
+  genome = "$output/jellyfish_indexes/$kmer_length/$(replace(basename(genome), ".fa" => ".jl"))"
   println("genome kmer index output : $genome")
 end
-if ismatch(r".*\.fa", transcriptome) == true
-  run(`jellyfish count -m $kmer_length -s 10000 -t $nbthreads -o $output/jellyfish_indexes/$kmer_length/$(replace(basename(transcriptome), ".fa", ".jl")) $transcriptome`)
-  transcriptome = "$output/jellyfish_indexes/$kmer_length/$(replace(basename(transcriptome), ".fa", ".jl"))"
+if occursin(r".*\.fa", transcriptome) == true
+  run(`jellyfish count -m $kmer_length -s 10000 -t $nbthreads -o $output/jellyfish_indexes/$kmer_length/$(replace(basename(transcriptome), ".fa" => ".jl")) $transcriptome`)
+  transcriptome = "$output/jellyfish_indexes/$kmer_length/$(replace(basename(transcriptome), ".fa" => ".jl"))"
   println("transcriptome kmer index output : $transcriptome")
 end
 
@@ -436,9 +448,9 @@ end # end of APPRIS function
 
 find_longer_variant = function(gene_name, dico_transcriptome)
 
-    nb_variants = length(filter((k,v) -> startswith(k, "$gene_name:"), dico_transcriptome))
+    nb_variants = length(filter(k -> startswith(k.first, "$gene_name:"), dico_transcriptome))
     println("nb variants : $nb_variants")
-    variants_dico = filter((k,v) -> startswith(k, "$gene_name:"), dico_transcriptome)
+    variants_dico = filter(k -> startswith(k.first, "$gene_name:"), dico_transcriptome)
     println("variants dico : $variants_dico")
     variants_lengths = Vector{Any}()
     for (k,v) in variants_dico
@@ -450,7 +462,7 @@ find_longer_variant = function(gene_name, dico_transcriptome)
     println("variants lengths : $variants_lengths")
     #println(maximum(variants_lengths))
     #println(String(keys(filter((k,v) -> length(v) == maximum(variants_lengths),variants_dico)[1])))
-    longer_variant = String(collect(keys(filter((k,v) -> length(v) == maximum(variants_lengths),variants_dico)))[1])
+    longer_variant = String(collect(keys(filter(v -> length(v.second) == maximum(variants_lengths),variants_dico)))[1])
     #longer_variant = split(keys(filter((k,v) -> length(v) == maximum(variants_lengths),variants_dico)[1])[1])[2]
     
     println("$gene_name : longer variant = $longer_variant")
@@ -471,9 +483,9 @@ if unannotated_option == false
     for (desc, seq) in fr
       desc_array = split(desc)
       #println( desc_array[1])
-      gene_name = replace(desc_array[7], "gene_symbol:", "")
+      gene_name = replace(desc_array[7], "gene_symbol:" => "")
       ensembl_transcript_name = split(desc_array[1],'.')[1]
-      ensembl_gene_name = split(replace(desc_array[4], "gene:",""), '.')[1]
+      ensembl_gene_name = split(replace(desc_array[4], "gene:" => ""), '.')[1]
       #println("ensembl gene name : $ensembl_gene_name")
       #println("ensembl transcript name : $ensembl_transcript_name")
       #println("gene name : $gene_name")
@@ -564,6 +576,7 @@ for _ in 1:nworkers()
 print("\n")
 end
 
+#for splitted_fasta_files in readdir("$output/sequences/$kmer_length/")
 @everywhere function f(splitted_fasta_files)
 #store worker id and X variable, for line replacement (if one core, one line up, if worker 3, 2 lines up)
 if(myid() == 1) X = myid() else X = myid()-1 end
@@ -587,11 +600,11 @@ end
     gene_name = split(splitted_fasta_files, ":")[1]
 #    println("$gene_name")
     transcript_name = split(splitted_fasta_files, ":")[2]
-#    test = filter((k,v) -> startswith(k, "$gene_name:"), dico_transcriptome)
+#    test = filter((k -> startswith(k.frist, "$gene_name:"), dico_transcriptome)
 #    println(test)
-    nb_variants = length(filter((k,v) -> startswith(k, "$gene_name:"), dico_transcriptome))
+    nb_variants = length(filter(k -> startswith(k.first, "$gene_name:"), dico_transcriptome))
 #    println("nb variants : $nb_variants")
-    variants_dico = filter((k,v) -> startswith(k, "$gene_name:"), dico_transcriptome)
+    variants_dico = filter(k -> startswith(k.first, "$gene_name:"), dico_transcriptome)
     #println("variants dico : $variants_dico")
 #    variants_lengths = Vector{Any}()
 #    for (k,v) in variants_dico
@@ -638,10 +651,11 @@ end
 remotecall(replace_line, 1 , X, "worker number $(myid()), for $level $gene_name, reporting for duty ! :)\n")
 
 #global genome
-  kmercounts_genome = readstring(`jellyfish query -s "$output/sequences/$kmer_length/$splitted_fasta_files" "$genome"`)
+  kmercounts_genome = read(`jellyfish query -s "$output/sequences/$kmer_length/$splitted_fasta_files" "$genome"`,String)
+#print(kmercounts_genome)
 remotecall(replace_line, 1 , X, "jellyfish query on genome.jl finished")
-  kmercounts_transcriptome = readstring(`jellyfish query -s "$output/sequences/$kmer_length/$splitted_fasta_files" "$transcriptome"`)
-
+  kmercounts_transcriptome = read(`jellyfish query -s "$output/sequences/$kmer_length/$splitted_fasta_files" "$transcriptome"`,String)
+#print(kmercounts_transcriptome)
 remotecall(replace_line, 1 , X, "jellyfish query on transcriptome.jl finished")
 #println("jellyfish query on transcriptome.jf finished")
 
@@ -651,9 +665,11 @@ kmercounts_genome = split(kmercounts_genome, "\n")[1:end-1]
 kmercounts_genome_dico = Dict()
 for mer in kmercounts_genome
 mer = split(mer)
+#println(mer)
 counts = mer[2]
 seq = mer[1]
 kmercounts_genome_dico["$seq"] = counts
+#println(typeof(keys(kmercounts_genome_dico)))
 end
 
 kmercounts_transcriptome_dico = Dict()
@@ -663,25 +679,34 @@ mer = split(mer)
 counts = mer[2]
 seq = mer[1]
 kmercounts_transcriptome_dico["$seq"] = counts
+#println(typeof(keys(kmercounts_transcriptome_dico)))
+
 end
 
 
 
 #initialisation of count variables
 i = 0
-total_kmers = length(keys(kmercounts_transcriptome_dico))
 
+#println(length(kmercounts_transcriptome_dico))
+total_kmers = length(keys(kmercounts_transcriptome_dico))
 ## create a new dictionary containing starts of kmers coordinates, to index
 #kmers by their place on the sequence
 kmer_starts = Dict()
 kmer_placed = 0
 #println("start processing kmer place on input sequence")
-total_kmer_number = length(keys(kmercounts_transcriptome_dico))
+#total_kmer_number = length(keys(kmercounts_transcriptome_dico))
+
+
 for mer in keys(kmercounts_transcriptome_dico)
 kmer_placed = kmer_placed +1
 
-remotecall(replace_line, 1 , X, "kmers placed = $kmer_placed on $total_kmer_number")
-kmer_interval = search("$sequence_fasta", "$mer")
+remotecall(replace_line, 1 , X, "kmers placed = $kmer_placed on $total_kmers")
+#println("sequence : $sequence_fasta")
+#println("mer : $mer")
+findfirst("$sequence_fasta", "$mer")
+kmer_interval = findfirst("$mer","$sequence_fasta")
+#println(kmer_interval)
 kmer_start = minimum(collect(kmer_interval))
 #kmer_end = maximum(collect(kmer_interval))
 kmer_starts["$mer"] = kmer_start
@@ -692,18 +717,19 @@ for tuple in sort(collect(zip(values(kmer_starts),keys(kmer_starts))))
 ##for now, I can only have a sorted array of tuples, I have to extract sequence
 #for each tuple
 mer = last(tuple)
-tic()
+startt = time()
 kmers_analysed = kmers_analysed + 1
 per = round(kmers_analysed/total_kmers*100)
 enlapsed_time = enlapsed_time + step_time
 if enlapsed_time == 0
   time_remaining = 0
 else
-  time_remaining = Integer(round((total_kmers - kmers_analysed)/(kmers_analysed/enlapsed_time)))
+  time_remaining = Integer(ceil((total_kmers - kmers_analysed)/(kmers_analysed/enlapsed_time)))
 end
 ptime = Dates.canonicalize(Dates.CompoundPeriod(Dates.Second(time_remaining)))
+ptime = time_remaining
 #println("time : $ptime")  
-remotecall(replace_line, 1 , X, "$level $gene_name : $kmers_analysed kmers analysed,$i specifics,( $per %) :remaining time -> $ptime")
+remotecall(replace_line, 1 , X, "$level $gene_name : $kmers_analysed kmers analysed ( $per %)  ,$i specifics,:remaining time -> $ptime sec.")
 
 #println("-------------------------------------------------------------------------------------------")
 
@@ -711,7 +737,7 @@ if !any(x->x == "$mer", keys(kmercounts_genome_dico))
 
     #println("$mer not defined : reversed ?")
   d = Dict("A"=>"T", "C"=> "G", "G"=>"C", "T"=>"A")
-  new_mer = reverse(replace(mer, r"[ACGT]{1}", x->d[x]))  # "TGCA"
+  new_mer = reverse(replace(mer, r"[ACGT]{1}" => x->d[x]))  # "TGCA"
   #println("$(String(reverse_complement!(dna"$mer"))))")
   genome_count = kmercounts_genome_dico["$new_mer"]
   #println("genome count : $genome_count")
@@ -721,21 +747,23 @@ genome_count = kmercounts_genome_dico["$mer"]
 
 end
 
-transcriptome_count = kmercounts_transcriptome_dico["$mer"]
+transcriptome_count = parse(Float64, kmercounts_transcriptome_dico["$mer"])
 #println("transcriptome count : $transcriptome_count")
+
+#println("transcriptome count : $(typeof(transcriptome_count))")
 if level == "gene"
          #println("genome count : $genome_count")
           if genome_count == "1" || genome_count == "0"#if the kmer is present/unique or does not exist (splicing?) on the genome
             mer_regex = Regex(mer)
-            variants_containing_this_kmer = keys(filter((k,v) -> ismatch(mer_regex, v), variants_dico))
-            if stringent_option == true && float(transcriptome_count) == float(nb_variants) == float(length(variants_containing_this_kmer)) 
+            variants_containing_this_kmer = keys(filter(v -> occursin(mer_regex, v.second), variants_dico))
+            if stringent_option == true && Float64(transcriptome_count) == Float64(nb_variants) == Float64(length(variants_containing_this_kmer)) 
                 #println("specific kmer found !")
               i = i+1
                 tmp = length(variants_containing_this_kmer)
               push!(fasta_array,">$gene_name-$transcript_name.kmer$i ($tmp/$nb_variants)")
               push!(fasta_array,"$mer")
 
-          elseif stringent_option == false && float(transcriptome_count) == float(length(variants_containing_this_kmer)) && float(transcriptome_count) > float(nb_variants*admission_threshold)
+          elseif stringent_option == false && Float64(transcriptome_count) == Float64(length(variants_containing_this_kmer)) && Float64( transcriptome_count) > Float64( nb_variants*admission_threshold)
 
                 #println("specific kmer found")
                 i = i+1
@@ -743,7 +771,7 @@ if level == "gene"
               push!(fasta_array,">$gene_name-$transcript_name.kmer$i ($tmp/$nb_variants)" )
               push!(fasta_array, "$mer")
 
-            elseif unannotated_option == true && float(transcriptome_count) == float(0)
+            elseif unannotated_option == true && Float64(transcriptome_count) == Float64(0)
 
               i = i+1
               push!(fasta_array,">$gene_name-$transcript_name.kmer$i" )
@@ -762,13 +790,13 @@ if level == "transcript"
   #println("$genome_count")
   #println("$transcriptome_count")
   #println(parse(Int, genome_count) <= 1 )
-  #println(float(transcriptome_count) == float(0))
-  if unannotated_option == true && float(transcriptome_count) == float(0) && parse(Int, genome_count) <= 1
+  #println(Float64(transcriptome_count) == Float64(0))
+  if unannotated_option == true && Float64(transcriptome_count) == Float64(0) && parse(Int, genome_count) <= 1
       i = i+1
               push!(fasta_array,">$gene_name.kmer$i")
               push!(fasta_array,"$mer")
 
-  elseif float(transcriptome_count) == float(1) && parse(Int, genome_count) <= 1
+  elseif Float64(transcriptome_count) == Float64(1) && parse(Int, genome_count) <= 1
     i = i+1
               push!(fasta_array,">$gene_name-$transcript_name.kmer$i")
               push!(fasta_array,"$mer")
@@ -780,8 +808,8 @@ if level == "chimera" && unannotated_option == true
     #println("$transcriptome_count")
 
     #println(parse(Int, genome_count) == 0 )
-    #println(float(transcriptome_count) == float(0))
-  if float(transcriptome_count) == float(0) && parse(Int, genome_count) == 0
+    #println(Float64(transcriptome_count) == Float64(0))
+  if Float64(transcriptome_count) == Float64(0) && parse(Int, genome_count) == 0
     #println("YES")
     i = i+1
               push!(fasta_array,">$gene_name.kmer$i")
@@ -790,7 +818,7 @@ if level == "chimera" && unannotated_option == true
   end
 
 
-step_time = Integer(round(toq()))
+step_time = Float64(time()-startt)
 #println("step time : $step_time")
 end # end of kmer analysis
 #println("$level $gene_name : $i specific kmers found")
