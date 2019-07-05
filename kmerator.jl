@@ -243,6 +243,7 @@ else
 gene_name = replace(desc_array[7], "gene_symbol:" => "")
 ensembl_transcript_name = split(desc_array[1],'.')[1]
 ensembl_gene_name = split(replace(desc_array[4], "gene:" => ""), '.')[1]
+
 dico_transcriptome["$gene_name:$ensembl_transcript_name"] = seq
 end
 
@@ -371,20 +372,22 @@ APPRIS_function = function(gene_ref)
 
 url = "http://apprisws.bioinfo.cnio.es/rest/exporter/id/"*"$APPRIS_option"*"/" *
 "$gene_ref" * "?methods=appris&format=json&sc=ensembl"
+println(url)
 #make_API_call(url)
 function HTTPTEST(url)
   try
     r = HTTP.request("GET", "$url"; verbose=0)
     res = String(r.body)
     res = JSON.Parser.parse(res)
-    
+    length(res) 
     #println(res)
 
     return res
   catch err
     error_message = "ERROR:\n $err"
+    println(error_message)
     res = "NODATA"
-    return err
+    return res
   end
 end
 
@@ -393,7 +396,7 @@ end
 test = HTTPTEST(url)
 println("type of response : $(typeof(test))")
 #test = r
-#println("$test")
+println("res = $test")
 #r2 = String(r.body)
 #json = JSON.parse(r2)
 
@@ -408,7 +411,8 @@ end
 toto = filter(x -> occursin("PRINCIPAL:", x), toto)
 
 if isempty(toto)
-  println("No principal isoforms detected, abort")
+  println("No principal isoforms detected, this function will return 'NODATA' and the longest transcript will be selected")
+  return(res)
 end
 
 toto2 = []
@@ -430,7 +434,7 @@ toto3 = toto3[map(x -> x == max_length, toto3[:, 2]), :]
 res= String( unique(toto3[:,1])[1])
 
 
-#println("APPRIS result : $res")
+println("APPRIS result : $res")
 
 
 
@@ -444,6 +448,9 @@ res= String( unique(toto3[:,1])[1])
 println("APPRIS result : $res")
 println("APPRIS time : $time")
 return(res)
+
+
+
 end # end of APPRIS function
 
 find_longer_variant = function(gene_name, dico_transcriptome)
@@ -484,6 +491,7 @@ if unannotated_option == false
       desc_array = split(desc)
       #println( desc_array[1])
       gene_name = replace(desc_array[7], "gene_symbol:" => "")
+      gene_name = replace(gene_name, "/" => "@SLASH@") # some genes names can caontain some slash characters, break the processus
       ensembl_transcript_name = split(desc_array[1],'.')[1]
       ensembl_gene_name = split(replace(desc_array[4], "gene:" => ""), '.')[1]
       #println("ensembl gene name : $ensembl_gene_name")
