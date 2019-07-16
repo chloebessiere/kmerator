@@ -454,7 +454,7 @@ return(res)
 end # end of APPRIS function
 
 find_longer_variant = function(gene_name, dico_transcriptome)
-
+    gene_name = replace(gene_name, "@SLASH@" => "/")
     nb_variants = length(filter(k -> startswith(k.first, "$gene_name:"), dico_transcriptome))
     println("nb variants : $nb_variants")
     variants_dico = filter(k -> startswith(k.first, "$gene_name:"), dico_transcriptome)
@@ -472,7 +472,10 @@ find_longer_variant = function(gene_name, dico_transcriptome)
     longer_variant = String(collect(keys(filter(v -> length(v.second) == maximum(variants_lengths),variants_dico)))[1])
     #longer_variant = split(keys(filter((k,v) -> length(v) == maximum(variants_lengths),variants_dico)[1])[1])[2]
     
+    
+    gene_name = replace(gene_name, "/" => "@SLASH@")
     println("$gene_name : longer variant = $longer_variant")
+    
     return(longer_variant)
 end
 
@@ -483,31 +486,33 @@ end
 
 #split each sequence of fasta input file into individual fastas
 # WARNING work only with ensembl fasta descriptions!
+
 if unannotated_option == false
     genes_already_processed = []
     genes_analysed = []
     FastaReader("$fastafile") do fr
     for (desc, seq) in fr
       desc_array = split(desc)
+    APPRIS_transcript = ""
       #println( desc_array[1])
       gene_name = replace(desc_array[7], "gene_symbol:" => "")
-      gene_name = replace(gene_name, "/" => "@SLASH@") # some genes names can caontain some slash characters, break the processus
+      #gene_name = replace(gene_name, "/" => "@SLASH@") # some genes names can caontain some slash characters, break the processus
       ensembl_transcript_name = split(desc_array[1],'.')[1]
       ensembl_gene_name = split(replace(desc_array[4], "gene:" => ""), '.')[1]
-      #println("ensembl gene name : $ensembl_gene_name")
-      #println("ensembl transcript name : $ensembl_transcript_name")
-      #println("gene name : $gene_name")
+      println("ensembl gene name : $ensembl_gene_name")
+      println("ensembl transcript name : $ensembl_transcript_name")
+      println("gene name : $gene_name")
       #println("ensembl gene name : $(split(ensembl_gene_name, '.'))[1]")
       #println("test to see if gene name in list")
         ## engage this loop only if the gene have not been already processed (otherwise, the gene will be processed n times, n being the number of transcripts of the same genes in the reference fasta)
       if isempty(select_option) || (select_option != nothing && (gene_name in select_option || ensembl_transcript_name in select_option || ensembl_gene_name in select_option)) && (gene_name in genes_already_processed) == false
         # take all sequence corresponding to asked gene names (select option)
         # take all if select_option not provided
-	  if APPRIS_option != nothing 
+	  if APPRIS_option != nothing && (gene_name in genes_analysed) == false
 	    APPRIS_transcript = APPRIS_function(ensembl_gene_name) 
             println("APPRIS selected variant : $APPRIS_transcript")
 		push!(genes_analysed, gene_name)
-          end
+        end
         #find_longer_variant(gene_name,dico_transcriptome)
           println("$ensembl_transcript_name")
           println("marqueur ici : $gene_name")
@@ -517,6 +522,7 @@ if unannotated_option == false
             println("ensembl_transcript_name : $ensembl_transcript_name")
             if length("$seq") >= kmer_length 
               println("$gene_name:$ensembl_transcript_name : good length, continue")
+            gene_name = replace(gene_name, "/" => "@SLASH@") # some genes names can caontain some slash characters, break the processus
               FastaWriter("$output/sequences/$kmer_length/$gene_name:$ensembl_transcript_name.fa") do fwsequence
         #for (desc2, seq2) in fr
               write(fwsequence, [">$gene_name:$ensembl_transcript_name", "$seq"])
@@ -531,16 +537,16 @@ if unannotated_option == false
     println("genes analysed : $genes_analysed")
     println("genes analysed (unique): $(unique(genes_analysed))")
     for i in unique(genes_analysed)
-    	#println(" dollar i : $i")
+    	#println(" dollar i : $i") 
 	#println("in genes already expressed : $(i in genes_already_processed)")
    	# it can happen that APPRIS contain obscolete id or other error, in this case the longer variant is selected for the concerned genes (passed in loop but have not provided a "sequence" fasta)
-    	if (i in genes_already_processed) == false
+    	if (replace(i, "/" => "@SLASH@") in genes_already_processed) == false
 		println("ERROR : There is a problem with $i, APPRIS function have not worked properly, somtimes an outdated APPRIS reference, in this case the longer transcript is selected from the reference fasta")
 		id = find_longer_variant(i,dico_transcriptome)
-		#println("coucou")
+        #println("coucou")
 
 		#println(dico_transcriptome["$id"])
-              FastaWriter("$output/sequences/$kmer_length/$id") do fwsequence
+              FastaWriter("$output/sequences/$kmer_length/$(replace(id, "/" => "@SLASH@"))") do fwsequence
         	
                 write(fwsequence, [">$id", string(dico_transcriptome["$id"])])
             end
