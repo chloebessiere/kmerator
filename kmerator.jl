@@ -2,7 +2,7 @@
 
 # AUTHOR : Sébastien RIQUIER, IRMB, Montpellier
 
-print("                                                       
+println("                                                       
  ____  __.                        | |            
 |    |/ _| ___ _ __ _ __ ___  __ _| |_ ___  _ __   
 |      <  | '_ ` _ \\/ _ \\ '__/ _` | __/ _ \\| '__|  
@@ -10,112 +10,108 @@ print("
 |____|__ \\|_| |_| |_\\___|_|  \\__,_|\\__\\___/|_|     
         \\/                                              
 -------------------------------------------------- 
-		  VERSION v0.1.0
+      VERSION v0.1.1
 
 Dependencies :
-- Julia language >= v1.1
+- Julia language >= v1.2
 - Jellyfish >= v2.0
 --------------------------------------------------")
 
-
-#print_with_color(:orange,intro)
-
-
 using Pkg
 
+packages = ("ArgParse", "Distributed", "ParallelDataTransfer", 
+            "HTTP", "JSON", "FastaIO")
 
-#@everywhere using ParallelDataTransfer
-if haskey(Pkg.installed(), "Distributed") using Distributed 
-else 
-Pkg.add("Distributed") 
+
+## Evaluate and install package if missing
+function check_installed_pkg()
+    missing_pkg = []
+    for mod in packages
+        if ! haskey(Pkg.installed(), mod) 
+        push!(missing_pkg, mod)
+        end
+    end
+    if length(missing_pkg) != 0
+        println("List of missing packages: ")
+        for pkg in missing_pkg
+            println("  $pkg")
+        end
+        print("Install automatically ? (y,n*): ")
+        ack = chomp(readline(stdin))
+        ## ask for automatically install missing packages
+        if lowercase(ack) == "y"
+            for pkg in missing_pkg
+                println("Installing $pkg")
+                Pkg.add(pkg)
+            end
+        else
+            println("\nProgram aborted by user\n")
+            exit()
+        end
+    end
+end
+
+check_installed_pkg()
+
 using Distributed
-end
-if haskey(Pkg.installed(), "ParallelDataTransfer") using  ParallelDataTransfer
-else 
-Pkg.add("ParallelDataTransfer") 
-using ParallelDataTransfer
-end
-
-
-
 @everywhere using Dates
 @everywhere using DelimitedFiles
-
-if haskey(Pkg.installed(), "HTTP") using HTTP
-else 
-Pkg.add("HTTP") 
+using  ParallelDataTransfer
 using HTTP
-end
-
-if haskey(Pkg.installed(), "JSON") using JSON
-else 
-Pkg.add("JSON") 
 using JSON
-end
+using ArgParse 
+@everywhere using FastaIO
 
 
 
-
-if haskey(Pkg.installed(), "ArgParse") using ArgParse
-else 
-Pkg.add("ArgParse") 
-using ArgParse
-end
-
-if haskey(Pkg.installed(), "FastaIO") 
-@everywhere using FastaIO 
-else 
-Pkg.add("FastaIO") 
-using FastaIO
-end
-
-#@everywhere using ProgressMeter
-
-#if haskey(Pkg.installed(), "RCall") using RCall 
-#else Pkg.add("RCall") 
-#using RCall  
-#end
-
-
-#Parse argument
+## parse argument
 s = ArgParseSettings()
 @add_arg_table s begin
-
-"--selection"
-    help = "list of gene to select directly inside your fasta transcriptome file"
-    action = :append_arg 
-    nargs = '*'
-"--appris"
-    help = " indicate : 'homo_sapiens','mus_musculus','rattus_norvegicus','danio_rerio','sus_scrofa','' or virtually any specie available on APPRIS database (Rodriguez JM, Rodriguez-Rivas J, Domenico TD, Vázquez J, Valencia A, and Tress ML. Nucleic Acids Res. Database issue; 2017 Oct 23.).
-    A gene have multiple possible sequence depending of its variants. this option select the principal transcript of a gene, based of APPRIS database, or by length if no data or no connection. If 'APPRIS option and not available data or no principal transcript (non-coding genes), use length instead"
-    arg_type = String
-
-"--unannotated", "-u"
-      action = :store_true
-      help = "activated if the provided initial fasta file correspond to an annotation external from Ensembl. Otherwise, use ensembl fasta files !"
-
-      "--stringent", "-s"
+    "--selection"
+        help = "list of gene to select directly inside your fasta transcriptome file"
+        action = :append_arg 
+        nargs = '*'
+    "--appris"
+        help = """indicate: 'homo_sapiens', 'mus_musculus', 'rattus_norvegicus',
+            'danio_rerio', 'sus_scrofa', or virtually any specie available on 
+            APPRIS database (Rodriguez JM, Rodriguez-Rivas J, Domenico TD, 
+            Vázquez J, Valencia A, and Tress ML. Nucleic Acids Res. Database 
+            issue; 2017 Oct 23.). A gene have multiple possible sequence depending 
+            of its variants. this option select the principal transcript of a gene, 
+            based of APPRIS database, or by length if no data or no connection. 
+            If 'APPRIS option and not available data or no principal transcript 
+            (non-coding genes), use length instead"""
+        arg_type = String
+    "--unannotated", "-u"
         action = :store_true
-        help = "if you think a gene-specific tag must be unique but present in ALL KNOWN TRANSCRIPT, if false, the kmer is considered as gene-specific is present only in variant of the corresponding gene, independently of the number know variant containing the kmer"
-
-      "--verbose", "-v"
+        help = """activated if the provided initial fasta file correspond to an 
+            annotation external from Ensembl. Otherwise, use ensembl fasta files !"""
+    "--stringent", "-s"
+        action = :store_true
+        help = """if you think a gene-specific tag must be unique but present in 
+            ALL KNOWN TRANSCRIPT, if false, the kmer is considered as gene-specific 
+            is present only in variant of the corresponding gene, independently 
+            of the number know variant containing the kmer"""
+    "--verbose", "-v"
         action = :store_true
         help = "If you want this script talk too much"
-
     "--genome", "-g"
         help = "the genome fasta (.fa) or index by jellyfish for kmer request"
         #type = String
         required = true
     "--transcriptome", "-t"
-        help = "the transcriptome fasta (.fa) (FASTA ONLY) for kmer request and transcriptional variant informations"
+        help = """the transcriptome fasta (.fa) (FASTA ONLY) for kmer request 
+            and transcriptional variant informations"""
         #type = String
         required = true
     "--level", "-l"
-        help = "type 'gene', 'transcript' or 'chimera' to extract specific kmer at these different levels. 'chimera' option must be done with 'unannotated' option!."
+        help = """type 'gene', 'transcript' or 'chimera' to extract specific 
+            kmer at these different levels. 'chimera' option must be done with 
+            'unannotated' option!."""
         required = true
     "--output", "-o"
         help = "directory of output"
-        default = "."
+        default = "output"
     "--length"
         help = "length required for the kmer generation"
         default = 31
@@ -123,454 +119,376 @@ s = ArgParseSettings()
     "fasta_file" #argument, no option
         help = "the fasta input file"
         required = true
-
     "--threshold"
-        help = "FOR GENE LEVEL ONLY : Minimum fraction of annotated transcripts containing this kmer to admit it (default 0)"
+        help = """FOR GENE LEVEL ONLY : Minimum fraction of annotated transcripts 
+            containing this kmer to admit it (default 0)"""
         default = 0.5
         arg_type = Float64
 end
+
 parsed_args = parse_args(ARGS, s)
 
-print(parsed_args)
-
-
-# variable attribution
-
-output = parsed_args["output"]
-if occursin(r"\/$", output)
-  output = replace(output, r"/$" => "")
+##### Set variables
+function set_variables()
+    ## Output
+    global output = parsed_args["output"]
+    if occursin(r"\/$", output)
+        global output = replace(output, r"/$" => "")
+    end
+    ## selection
+    global select_option = parsed_args["selection"]
+    if !isempty(select_option)
+        select_option = select_option[1]
+    end
+    ## APPRIS
+    global APPRIS_option = parsed_args["appris"]
+    if APPRIS_option != nothing
+        println("APPRIS selection of principal transcripts for $APPRIS_option" )
+    end
+    ## Verbose
+    global verbose_option = parsed_args["verbose"]
+    ## Unannotated option
+    global unannotated_option = parsed_args["unannotated"]
+    ## Stringent option
+    global stringent_option = parsed_args["stringent"]
+    ## Admission threshold option
+    global admission_threshold = parsed_args["threshold"]
+    ## Genome option
+    global genome = parsed_args["genome"]
+    ## Transcriptome option
+    global transcriptome = parsed_args["transcriptome"]
+    ## kmer length option
+    global kmer_length = parsed_args["length"]
+    ## Fasta file option (input sequences file)
+    global fastafile = parsed_args["fasta_file"]
+    ## Threads number
+    global nbthreads =  nworkers()
+    ## Level of kmer specificity
+    global level = parsed_args["level"]
+    ## Show options if verbose option
+    if verbose_option println("
+        \r OPTIONS
+        \r -------
+        \r Output directory:           $output
+        \r Selection option, genes:    ", length(select_option)>0 ? (select_option, ", ") : "nothing", "
+        \r APPRIS option:              ", repr(APPRIS_option),"
+        \r Verbose option:             $verbose_option
+        \r Unannotated option:         ", unannotated_option ? "yes" : "no", "
+        \r Stringent option:           $stringent_option
+        \r Admission threshold option: $admission_threshold
+        \r Genome option:              $genome
+        \r Transcriptome option:       $transcriptome
+        \r Kmer length option:         $kmer_length
+        \r Input sequences files:      $fastafile
+        \r Level of kmer specificity:  $level
+        \r nb process:                 $nbthreads")
+    end
 end
 
-
-println("output directory: $output")
-
-select_option = parsed_args["selection"]
-println(select_option)
-if !isempty(select_option)
-select_option = select_option[1]
-end
-APPRIS_option = parsed_args["appris"]
-if APPRIS_option != nothing
-    println("APPRIS selection of principal transcripts for $APPRIS_option" )
-end
-
-verbose_option = parsed_args["verbose"]
-unannotated_option = parsed_args["unannotated"]
-
-
-
-stringent_option = parsed_args["stringent"]
-if stringent_option == true
-println("stringent: yes")
-end
-admission_threshold = parsed_args["threshold"]
-genome = parsed_args["genome"]
-transcriptome = parsed_args["transcriptome"]
-println("transcriptome : $transcriptome")
-println("genome : $genome")
-
-kmer_length = parsed_args["length"]
-println("length: $kmer_length")
-nbthreads =  nworkers()
-println("nb process = $nbthreads")
-fastafile = parsed_args["fasta_file"]
-println("input sequences files = $fastafile")
-
-level = parsed_args["level"]
-println("level of kmer specificity = $level")
-if unannotated_option == true
-println("annotated references : no")
-else
-println("annotated references : yes")
-end
 
 ##### Options verification part
-if ! isfile("$genome")
-  error("genome not found")
-end
-if ! isfile("$transcriptome")
-  error("transcriptome not found")
-end
-if ! isfile("$fastafile")
-  error("input fasta file not found")
-end
-
-## Ensembl annotation are ENSTXXXX.XX or ENSGXXXXX.XX in ensembl annotation, to avoid bad recognition for selection option,
-## putting annotation like ENSTXXXXX.X for selection is forbidden
-if select_option != nothing
-    for i in select_option
-        println("requested gene : $i")
-        if occursin(".", i) && occursin("ENS", i)
-        error("ensembl annotations with a point like ENSTXXXXXXXX.1 is forbidden, just remove the .1")
-end
-end
-end
-
-
-#println("essais")
-#println(APPRIS_option != nothing)
-#println(level != "gene" || unannotated_option == true)
-if APPRIS_option != nothing && (level != "gene" || unannotated_option == true)
-error("APPRIS option works only with the gene annotated level ")
-end
-
-#####
-
-
-#verif of fasta ensembl annotation
-
-if occursin(r".*\.fa", transcriptome) == true
-  println("input fasta (*.fa) file, continue")
-else
-  error("error provided transcriptome : not a fasta file") 
-end
-
-# create dictionary of transcriptome fasta
-println("create dictionary of transcriptome fasta")
-
-
-
-dico_transcriptome = Dict()
-
-FastaReader("$transcriptome") do fr
-for (desc, seq) in fr
-desc_array = split(desc)
-      # println( desc_array[1])
-if unannotated_option == true
-gene_name = desc
-dico_transcriptome["$gene_name"] = seq
-else
-gene_name = replace(desc_array[7], "gene_symbol:" => "")
-ensembl_transcript_name = split(desc_array[1],'.')[1]
-ensembl_gene_name = split(replace(desc_array[4], "gene:" => ""), '.')[1]
-
-dico_transcriptome["$gene_name:$ensembl_transcript_name"] = seq
-end
-
-end
-end
-
-println("transcripts_distionarty finished")
-
-#directories creation
-if ! isdir("$output/sequences")
-    mkdir("$output/sequences")
-end
-if ! isdir("$output/sequences/$kmer_length")
-    mkdir("$output/sequences/$kmer_length")
-end
-if ! isdir("$output/tags")
-    mkdir("$output/tags")
-end
-if ! isdir("$output/tags/$kmer_length")
-    mkdir("$output/tags/$kmer_length")
-end
-if ! isdir("$output/jellyfish_indexes")
-    mkdir("$output/jellyfish_indexes")
-end
-if ! isdir("$output/jellyfish_indexes/$kmer_length")
-    mkdir("$output/jellyfish_indexes/$kmer_length")
+function checkup_variables()
+    ## test genome file
+    if ! isfile(genome)
+        println("\nFileError: genome not found (file: $genome)\n")
+        exit(2)
+    elseif ! occursin(r".*\.(fa|fasta|jf|jl)$", genome)
+        println("\nFileTypeError: not a fasta or jellyfish file (file: $genome)\n")
+        exit(2)
+    end
+    ## test transcriptome file
+    if ! isfile(transcriptome)
+        println("\nFileError: transcriptome not found (file: $transcriptome)\n")
+        exit(2)
+    elseif ! occursin(r".*\.(fa|fasta)$", transcriptome)
+        println("\nFileTypeError: not a fasta file (file: $transcriptome)\n")
+        exit(2)
+    end
+    ## test fasta file
+    if ! isfile(fastafile)
+        println("\nFileError: fasta file not found (file: $fastafile)\n")
+        exit(2)
+    elseif ! occursin(r".*\.(fa|fasta)$", fastafile)
+        println("\nFileTypeError: not a fasta file (file: $fastafile)\n")
+        exit(2)
+    end
+    ## test selection option
+    if select_option != nothing
+        for gene in select_option
+            # ENSEMBL annotation are ENSTXXXX.XX or ENSGXXXXX.XX in ensembl annotation, 
+            # to avoid bad recognition for selection option, 
+            # putting annotation like ENSTXXXXX.X for selection is forbidden
+            if occursin(".", gene) && occursin("ENS", gene)
+                println("""\n ENSEMBL annotations with a point like ENSTXXXXXXXX.1 
+                    is forbidden, just remove the '.1'.\n""")
+            end
+        end
+    end
+    ## APPRIS option works only with the gene annotated level
+    if APPRIS_option != nothing && (level != "gene" || unannotated_option == true)
+        println("\n ApprisEror: APPRIS option works only with the gene annotated level\n")
+        exit(2)
+    end
+    ## verification of fasta ensembl annotation
+    if ! occursin(r".*\.(fa|fasta)$", transcriptome)
+        println("\n FileTypeError: $transcriptome seems not a fasta file\n") 
+        exit(2)
+    end
 end
 
 
-#verif of fasta file
-if occursin(r".*\.fa", fastafile) == true
-  println("input fasta (*.fa) file, continue")
-else
-  error("input : not a fasta file")
+function load_transcriptome(transcriptome_file)
+    if verbose_option println("\ncreate dictionary of transcriptome fasta") end
+    transcriptome_dict = Dict{String,String}()
+    FastaReader(transcriptome_file) do fr
+        if unannotated_option == true
+            for (desc, seq) in fr
+                transcriptome_dict[desc] = seq
+            end
+        else
+            for (desc, seq) in fr
+                desc_array = split(desc)
+                gene_name = split(desc_array[7], ":")[2]
+                ensembl_transcript_name = split(desc_array[1],'.')[1]
+                ensembl_gene_name = split(split(desc_array[4], ":")[2], '.')[1]
+                transcriptome_dict["$gene_name:$ensembl_transcript_name"] = seq
+            end
+        end
+    end
+    if verbose_option
+        println("First Sequence of transcriptome:")
+        for (name, seq) in transcriptome_dict
+            println(name, "\n", seq)
+            break
+        end
+    end
+    if verbose_option println("transcripts_distionarty finished") end
+    return transcriptome_dict
 end
 
-#verif of genome/transcriptome are fasta, do the jellyfish count in this case
-if occursin(r".*\.fa", genome) == true
-  run(`jellyfish count -C -m $kmer_length -s 10000 -t $nbthreads -o $output/jellyfish_indexes/$kmer_length/$(replace(basename(genome), ".fa" => ".jl")) $genome`)
-  genome = "$output/jellyfish_indexes/$kmer_length/$(replace(basename(genome), ".fa" => ".jl"))"
-  println("genome kmer index output : $genome")
+
+function run_jellyfish(genome, transcriptome)
+    jf_dir = "$output/jellyfish_indexes/$kmer_length"
+    
+    ## run jellyfish on Transcriptome
+    if verbose_option println("\nBegining jellyfish on Transcriptome.") end
+    jf_transcriptome = replace(basename(transcriptome), ".fa" => ".jf")
+    run(`mkdir -p $jf_dir`)
+    run(`echo jellyfish count -m $kmer_length -s 10000 -t $nbthreads -o $jf_dir/$jf_transcriptome $transcriptome`)
+    if verbose_option println("Transcriptome kmer index output: $jf_dir/$jf_transcriptome.") end
+    
+    ## run jellyfish on genome if genome is fasta file
+    if occursin(r".*\.(fa|fasta)$", genome)
+        if verbose_option println("\nBegining jellyfish on Genome.") end
+        jf_genome = replace(basename(genome), ".fa" => ".jf")
+        run(`jellyfish count -C -m $kmer_length -s 10000 -t $nbthreads -o $jf_dir/$jf_genome $genome`)
+        if verbose_option println("Genome kmer index output: $jf_dir/$jf_genome.") end
+    end
 end
-if occursin(r".*\.fa", transcriptome) == true
-  run(`jellyfish count -m $kmer_length -s 10000 -t $nbthreads -o $output/jellyfish_indexes/$kmer_length/$(replace(basename(transcriptome), ".fa" => ".jl")) $transcriptome`)
-  transcriptome = "$output/jellyfish_indexes/$kmer_length/$(replace(basename(transcriptome), ".fa" => ".jl"))"
-  println("transcriptome kmer index output : $transcriptome")
-end
+
 
 APPRIS_function = function(gene_ref)
-#gene_ref = "ENSG00000000457"
-#url = "http://apprisws.bioinfo.cnio.es/rest/exporter/id/"*"$APPRIS_option"*"/" * "$gene_ref" * "?methods=appris&format=json&sc=ensembl"
-#println(gene_ref)
-#println(url)
-#@rput gene_ref url
-
-# Initial R function
-#R"
-#start_time = Sys.time()
-#library(stringi)
-#library(rjson)
-#library(RCurl)
-#
-##queryId <- url
-#if(url.exists(url) == TRUE){
-#
-#
-#DATA <- fromJSON(file=url)
-#if(!exists('DATA')){
-#    res = 'NODATA'
-#      stop('No answer from APPRIS Database : non-coding RNA requested or no
-#      access to the site')
-#        }
-#        json_data <- function(DATA)
-#        {
-#            res <- NULL
-#              for (i in 1:length(DATA[]))
-#                  {
-#                      res <- rbind(res, DATA[[i]][c('gene_id', 'end', 'start',
-#                      'transcript_id', 'type', 'annotation', 'reliability')])
-#                        }
-#                        colnames(res) = c('gene_id', 'end', 'start',
-#                            'transcript_id', 'type', 'annotation', 'reliability')
-#                          return(res)
-#        }
-#        res <- as.data.frame(json_data(DATA))
-#        principal1 <- subset(res, stri_detect_fixed(res$reliability,
-#        'PRINCIPAL:1'))
-#        principal2 <- subset(res, stri_detect_fixed(res$reliability,
-#        'PRINCIPAL:2'))
-#        principal3 <- subset(res, stri_detect_fixed(res$reliability,
-#        'PRINCIPAL:3'))
-#        principal4 <- subset(res, stri_detect_fixed(res$reliability,
-#        'PRINCIPAL:4'))
-#        principal5 <- subset(res, stri_detect_fixed(res$reliability,
-#        'PRINCIPAL:5'))
-#
-#if (nrow(principal1) != 0){
-#    res <- principal1
-#} else if (nrow(principal2) != 0) {
-#    res <- principal2
-#} else if (nrow(principal3) != 0) {
-#    res <- principal3
-#} else if (nrow(principal4) != 0) {
-#    res <- principal4
-#} else {
-#    res <- principal5
-#}
-#
-#res$size <- as.integer(res$end) - as.integer(res$start) + 1
-#res <- subset(res, res$size == max(res$size))
-#res <- unique(res$transcript_id)
-#finish_time = Sys.time()
-#time = finish_time - start_time
-#
-#} else{
-#  res = 'NODATA'
-#  finish_time = Sys.time()
-#  time = finish_time - start_time
-#}
-#"
-
-
-
-##### APPRIS JULIA FUNCTION #####
-
-
-url = "http://apprisws.bioinfo.cnio.es/rest/exporter/id/"*"$APPRIS_option"*"/" *
-"$gene_ref" * "?methods=appris&format=json&sc=ensembl"
-println(url)
-#make_API_call(url)
-function HTTPTEST(url)
-  try
-    r = HTTP.request("GET", "$url"; verbose=0)
-    res = String(r.body)
-    res = JSON.Parser.parse(res)
-    length(res) 
-    #println(res)
-
-    return res
-  catch err
-    error_message = "ERROR:\n $err"
-    println(error_message)
-    res = "NODATA"
-    return res
-  end
-end
-
-
-
-test = HTTPTEST(url)
-println("type of response : $(typeof(test))")
-#test = r
-println("res = $test")
-#r2 = String(r.body)
-#json = JSON.parse(r2)
-
-#println(json)
-
-#println(isempty(json))
-toto = []
-for i in 1:length(test)
-  try push!(toto, test[i]["reliability"]) catch end
-end
-
-toto = filter(x -> occursin("PRINCIPAL:", x), toto)
-
-if isempty(toto)
-  println("No principal isoforms detected, this function will return 'NODATA' and the longest transcript will be selected")
-  return(res)
-end
-
-toto2 = []
-
-for i in 1:length(toto) push!(toto2, split(toto[i],":")[2]) end
-
-toto2 = map(x-> parse(Int, x), toto2)
-level = minimum(toto2)
-
-toto3 = hcat(map(x -> try x["transcript_id"] catch end, test),map(x -> try parse(Int, x["length_na"]) catch end, test),  map(x -> try x["reliability"] catch end, test))
-
-toto3 = toto3[map(x -> x != nothing, toto3[:, 3]), :]
-toto3 = toto3[map(x -> occursin("PRINCIPAL:$level",x), toto3[:, 3]), :]
-
-#toto3 = hcat(toto3,toto3[:,3]-toto3[:,2]+1)
-max_length = maximum(toto3[:,2])
-
-toto3 = toto3[map(x -> x == max_length, toto3[:, 2]), :]
-res= String( unique(toto3[:,1])[1])
-
-
-println("APPRIS result : $res")
-
-
-
-
-#appris_res = @rget res time
-# if worked
-#if res != "NODATA"
-#res = String(res[1])
-#end
-
-println("APPRIS result : $res")
-println("APPRIS time : $time")
-return(res)
-
-
-
+    if verbose_option println("-----\nStarting APPRIS function") end
+    #### Request to appris
+    url = "http://apprisws.bioinfo.cnio.es/rest/exporter/id/$APPRIS_option/" * 
+            "$gene_ref?methods=appris&format=json&sc=ensembl"
+    if verbose_option println("APPRIS url: $url") end
+    ## make_API_call(url)
+    function http_req(url)
+        try
+            r = HTTP.request("GET", url; verbose=0)
+            res = String(r.body)
+            res = JSON.Parser.parse(res)
+            return res
+        catch err
+            println("ERROR:\n $err")
+            res = "NODATA"
+            return res
+        end
+    end
+    transcripts = http_req(url)
+    if verbose_option && isa(transcripts, Array)
+        for transcript in transcripts
+            println("First transcript found:")
+            for (key,value) in transcript
+                println("  $key: $value")
+            end
+            break
+        end
+    end
+    
+    #### find better isoform
+    ## find Principals
+    principals = []
+    for (i,value) in enumerate(transcripts)
+        try 
+            if occursin("PRINCIPAL:", transcripts[i]["reliability"])
+                push!(principals, transcripts[i]["reliability"]) 
+            end
+        catch
+        end
+    end
+    ## if not principals, return NODATA
+    if isempty(principals)
+        println("No principal isoforms detected, this function will return " * 
+                    "'NODATA' and the longest transcript will be selected")
+        return(transcripts)
+    end
+    if verbose_option println("principals: $principals") end
+    ## Select better Principal (minimum level)
+    levels = []
+    for i in 1:length(principals)
+        push!(levels, split(principals[i],":")[2]) 
+    end
+    levels = map(x-> parse(Int, x), levels)
+    level = minimum(levels)
+    ## if multiple transcripts with better Principal, select biggest
+    selected_transcripts = hcat(map(x -> try x["transcript_id"] catch 
+                                            end, transcripts),
+                                map(x -> try parse(Int, x["length_na"]) catch 
+                                            end, transcripts),  
+                                map(x -> try x["reliability"] catch 
+                                            end, transcripts))
+    selected_transcripts = selected_transcripts[map(x -> x != nothing, selected_transcripts[:, 3]), :]
+    selected_transcripts = selected_transcripts[map(x -> occursin("PRINCIPAL:$level",x), selected_transcripts[:, 3]), :]
+    max_length = maximum(selected_transcripts[:,2])
+    selected_transcripts = selected_transcripts[map(x -> x == max_length, selected_transcripts[:, 2]), :]
+    
+    best_transcript = String( unique(selected_transcripts[:,1])[1])
+    if verbose_option println("APPRIS result : $best_transcript") end
+    if verbose_option println("APPRIS function finished -----") end
+    return(best_transcript)
 end # end of APPRIS function
 
-find_longer_variant = function(gene_name, dico_transcriptome)
+
+find_longest_variant = function(gene_name, transcriptome_dict)
+    if verbose_option println("-----\nStarting find_longest_variant function") end
     gene_name = replace(gene_name, "@SLASH@" => "/")
-    nb_variants = length(filter(k -> startswith(k.first, "$gene_name:"), dico_transcriptome))
-    println("nb variants : $nb_variants")
-    variants_dico = filter(k -> startswith(k.first, "$gene_name:"), dico_transcriptome)
-    println("variants dico : $variants_dico")
+    nb_variants = length(filter(k -> startswith(k.first, "$gene_name:"), transcriptome_dict))
+    if verbose_option println("nb variants : $nb_variants") end
+    variants_dict = filter(k -> startswith(k.first, "$gene_name:"), transcriptome_dict)
     variants_lengths = Vector{Any}()
-    for (k,v) in variants_dico
-        println(k)
-        println(v)
-      push!(variants_lengths, length(v))
+    for (k,v) in variants_dict
+        if verbose_option println(k, ": ", v[1:35], "...") end
+        push!(variants_lengths, length(v))
     end
-    
-    println("variants lengths : $variants_lengths")
-    #println(maximum(variants_lengths))
-    #println(String(keys(filter((k,v) -> length(v) == maximum(variants_lengths),variants_dico)[1])))
-    longer_variant = String(collect(keys(filter(v -> length(v.second) == maximum(variants_lengths),variants_dico)))[1])
-    #longer_variant = split(keys(filter((k,v) -> length(v) == maximum(variants_lengths),variants_dico)[1])[1])[2]
-    
-    
+    if verbose_option println("variants lengths : $variants_lengths") end
+    longest_variant = String(collect(keys(filter(v -> length(v.second) == maximum(variants_lengths), variants_dict)))[1])
+    ## sometimes, gene name contain a slash! 
     gene_name = replace(gene_name, "/" => "@SLASH@")
-    println("$gene_name : longer variant = $longer_variant")
-    
-    return(longer_variant)
+    if verbose_option println("$gene_name : longest variant = $longest_variant") end
+    if verbose_option println("find_longest_variant function finished") end
+    return(longest_variant)
 end
 
 
 
-
-
-
-#split each sequence of fasta input file into individual fastas
-# WARNING work only with ensembl fasta descriptions!
-
-if unannotated_option == false
-    genes_already_processed = []
-    genes_analysed = []
-    FastaReader("$fastafile") do fr
-    for (desc, seq) in fr
-      desc_array = split(desc)
-    APPRIS_transcript = ""
-      #println( desc_array[1])
-      gene_name = replace(desc_array[7], "gene_symbol:" => "")
-      #gene_name = replace(gene_name, "/" => "@SLASH@") # some genes names can caontain some slash characters, break the processus
-      ensembl_transcript_name = split(desc_array[1],'.')[1]
-      ensembl_gene_name = split(replace(desc_array[4], "gene:" => ""), '.')[1]
-      println("ensembl gene name : $ensembl_gene_name")
-      println("ensembl transcript name : $ensembl_transcript_name")
-      println("gene name : $gene_name")
-      #println("ensembl gene name : $(split(ensembl_gene_name, '.'))[1]")
-      #println("test to see if gene name in list")
-        ## engage this loop only if the gene have not been already processed (otherwise, the gene will be processed n times, n being the number of transcripts of the same genes in the reference fasta)
-      if isempty(select_option) || (select_option != nothing && (gene_name in select_option || ensembl_transcript_name in select_option || ensembl_gene_name in select_option)) && (gene_name in genes_already_processed) == false
-        # take all sequence corresponding to asked gene names (select option)
-        # take all if select_option not provided
-	  if APPRIS_option != nothing && (gene_name in genes_analysed) == false
-	    APPRIS_transcript = APPRIS_function(ensembl_gene_name) 
-            println("APPRIS selected variant : $APPRIS_transcript")
-		push!(genes_analysed, gene_name)
-        end
-        #find_longer_variant(gene_name,dico_transcriptome)
-          println("$ensembl_transcript_name")
-          println("marqueur ici : $gene_name")
-          #println("$gene_name:$ensembl_transcript_name" == find_longer_variant(gene_name,dico_transcriptome))
-	 
-          if APPRIS_option == nothing || (APPRIS_option != nothing && ensembl_transcript_name == APPRIS_transcript) || (APPRIS_option != nothing && APPRIS_transcript == "NODATA" && "$gene_name:$ensembl_transcript_name" == find_longer_variant(gene_name,dico_transcriptome)) 
-            println("ensembl_transcript_name : $ensembl_transcript_name")
-            if length("$seq") >= kmer_length 
-              println("$gene_name:$ensembl_transcript_name : good length, continue")
-            gene_name = replace(gene_name, "/" => "@SLASH@") # some genes names can caontain some slash characters, break the processus
-              FastaWriter("$output/sequences/$kmer_length/$gene_name:$ensembl_transcript_name.fa") do fwsequence
-        #for (desc2, seq2) in fr
-              write(fwsequence, [">$gene_name:$ensembl_transcript_name", "$seq"])
-	      push!(genes_already_processed, gene_name)
+function build_sequences()
+    if verbose_option println("----------\nBegining Build_sequences function") end
+    ## split each sequence of fasta input file into individual fastas
+    ## WARNING works only with ensembl fasta descriptions!
+    if ! unannotated_option
+        run(`mkdir -p "$output/sequences/$kmer_length"`)
+        genes_already_processed = []
+        genes_analysed = []
+        FastaReader(fastafile) do fr
+            for (desc, seq) in fr
+                desc_array = split(desc)
+                APPRIS_transcript = ""
+                # if verbose_option println("desc_array: $desc_array") end
+                gene_name = replace(desc_array[7], "gene_symbol:" => "")
+                ensembl_transcript_name = split(desc_array[1],'.')[1]
+                ensembl_gene_name = split(replace(desc_array[4], "gene:" => ""), '.')[1]
+                # println("ensembl gene name : $ensembl_gene_name")
+                # println("ensembl transcript name : $ensembl_transcript_name")
+                # println("gene name : $gene_name")
+                # println("test to see if gene name in list")
+                ## engage this loop only if the gene have not been already processed (otherwise, the gene will be processed n times, n being the number of transcripts of the same genes in the reference fasta)
+                if isempty(select_option) || (select_option != nothing && (gene_name in select_option || ensembl_transcript_name in select_option || ensembl_gene_name in select_option)) && (gene_name in genes_already_processed) == false
+                    # take all sequence corresponding to asked gene names (select option)
+                    # take all if select_option not provided
+                    if APPRIS_option != nothing && (gene_name in genes_analysed) == false
+                        APPRIS_transcript = APPRIS_function(ensembl_gene_name) 
+                        # println("APPRIS selected variant : $APPRIS_transcript")
+                        push!(genes_analysed, gene_name)
+                    end
+                    # println("$ensembl_transcript_name")
+                    # println("marqueur ici : $gene_name")
+                    if APPRIS_option == nothing || (APPRIS_option != nothing && ensembl_transcript_name == APPRIS_transcript) || (APPRIS_option != nothing && APPRIS_transcript == "NODATA" && "$gene_name:$ensembl_transcript_name" == find_longest_variant(gene_name,transcriptome_dict)) 
+                        println("ensembl_transcript_name : $ensembl_transcript_name")
+                        if length("$seq") >= kmer_length 
+                            println("$gene_name:$ensembl_transcript_name : good length, continue")
+                            gene_name = replace(gene_name, "/" => "@SLASH@") # some genes names can caontain some slash characters, break the processus
+                            FastaWriter("$output/sequences/$kmer_length/$gene_name:$ensembl_transcript_name.fa") do fwsequence
+                                write(fwsequence, [">$gene_name:$ensembl_transcript_name", "$seq"])
+                                push!(genes_already_processed, gene_name)
+                            end
+                        else 
+                            println("$gene_name:$ensembl_transcript_name : wrong length, ignored")
+                        end
+                    end
+                end
             end
-      
-          else println("$gene_name:$ensembl_transcript_name : wrong length, ignored")
-        end
-      end
-    end
-  end
-    println("genes analysed : $genes_analysed")
-    println("genes analysed (unique): $(unique(genes_analysed))")
-    for i in unique(genes_analysed)
-    	#println(" dollar i : $i") 
-	#println("in genes already expressed : $(i in genes_already_processed)")
-   	# it can happen that APPRIS contain obscolete id or other error, in this case the longer variant is selected for the concerned genes (passed in loop but have not provided a "sequence" fasta)
-    	if (replace(i, "/" => "@SLASH@") in genes_already_processed) == false
-		println("ERROR : There is a problem with $i, APPRIS function have not worked properly, somtimes an outdated APPRIS reference, in this case the longer transcript is selected from the reference fasta")
-		id = find_longer_variant(i,dico_transcriptome)
-        #println("coucou")
-
-		#println(dico_transcriptome["$id"])
-              FastaWriter("$output/sequences/$kmer_length/$(replace(id, "/" => "@SLASH@"))") do fwsequence
-        	
-                write(fwsequence, [">$id", string(dico_transcriptome["$id"])])
+            #println("genes analysed : $genes_analysed")
+            #println("genes analysed (unique): $(unique(genes_analysed))")
+            for i in unique(genes_analysed)
+                # println("in genes already expressed : $(i in genes_already_processed)")
+                # it can happen that APPRIS contain obscolete id or other error, in this case the longer variant is selected for the concerned genes (passed in loop but have not provided a "sequence" fasta)
+                if (replace(i, "/" => "@SLASH@") in genes_already_processed) == false
+                    println("ERROR : There is a problem with $i, APPRIS function have not worked properly, sometimes an outdated APPRIS reference, in this case the longer transcript is selected from the reference fasta")
+                    id = find_longest_variant(i,transcriptome_dict)
+                    #println(transcriptome_dict["$id"])
+                    FastaWriter("$output/sequences/$kmer_length/$(replace(id, "/" => "@SLASH@"))") do fwsequence
+                        write(fwsequence, [">$id", string(transcriptome_dict["$id"])])
+                    end
+                end
             end
-	  end
-	end
-end
-  # if the input fasta is not a part of ensembl annotation (-u)
-  else
-    FastaReader("$fastafile") do fr
-    for (desc, seq) in fr
-    gene_name = desc
-    if length("$seq") >= kmer_length
-      FastaWriter("$output/sequences/$kmer_length/$desc.fa") do fwsequence
-      write(fwsequence, [">$desc", "$seq"])
+        end
+    ## if the input fasta is not a part of ensembl annotation (-u)
+    else
+        FastaReader("$fastafile") do fr
+            for (desc, seq) in fr
+                gene_name = desc
+                if length("$seq") >= kmer_length
+                    FastaWriter("$output/sequences/$kmer_length/$desc.fa") do fwsequence
+                        write(fwsequence, [">$desc", "$seq"])
+                    end
+                else 
+                    println("$desc ========> wrong length, ignored")
+                end
+            end
+        end
     end
-  else println("$desc ========> wrong length, ignored")
+    if verbose_option
+        println("Sequences:")
+        for seq in (readdir("$output/sequences/$kmer_length/"))
+            println(" $seq")
+        end
     end
-    end
+    if verbose_option println("Build_sequences function finished-----") end
 end
-end
-println(readdir("$output/sequences/$kmer_length/"))
-#println(keys(dico_transcriptome))
 
-@passobj 1 workers() dico_transcriptome
+set_variables()
+checkup_variables()
+transcriptome_dict = load_transcriptome(transcriptome)
+run_jellyfish(genome, transcriptome)
+build_sequences()
+
+
+#~ APPRIS_transcript = APPRIS_function("ENSG00000103351")
+#~ println("APPRIS_transcript: $APPRIS_transcript")
+
+#~ longest_variant = find_longest_variant("CLUAP1", transcriptome_dict)
+#~ println("find_longest_variant: $longest_variant")
+
+
+################################################################################ 
+println("EOF"), exit() ######################################################### 
+################################################################################
+
+
+
+@passobj 1 workers() transcriptome_dict
 @passobj 1 workers() unannotated_option
 @passobj 1 workers() genome
 @passobj 1 workers() transcriptome
@@ -607,29 +525,29 @@ print(string("\u1b[$(nbline)F\u1b[2K"*"$x"*"\u1b[$(nbline)E"))
 end
 
 #println("$splitted_fasta_files")
-#println(dico_transcriptome)
+#println(transcriptome_dict)
 
 # manage the name of transcript/gene
   if unannotated_option == false # if annotated
     gene_name = split(splitted_fasta_files, ":")[1]
 #    println("$gene_name")
     transcript_name = split(splitted_fasta_files, ":")[2]
-#    test = filter((k -> startswith(k.frist, "$gene_name:"), dico_transcriptome)
+#    test = filter((k -> startswith(k.frist, "$gene_name:"), transcriptome_dict)
 #    println(test)
-    nb_variants = length(filter(k -> startswith(k.first, "$gene_name:"), dico_transcriptome))
+    nb_variants = length(filter(k -> startswith(k.first, "$gene_name:"), transcriptome_dict))
 #    println("nb variants : $nb_variants")
-    variants_dico = filter(k -> startswith(k.first, "$gene_name:"), dico_transcriptome)
-    #println("variants dico : $variants_dico")
+    variants_dict = filter(k -> startswith(k.first, "$gene_name:"), transcriptome_dict)
+    #println("variants dico : $variants_dict")
 #    variants_lengths = Vector{Any}()
-#    for (k,v) in variants_dico
+#    for (k,v) in variants_dict
 #        println(k)
 #        println(v)
 #      push!(variants_lengths, length(v))
 #    end
 
-#    longer_variant = split(keys(filter((k,v) -> length(v) == maximum(variants_lengths),variants_dico)[1]))[2]
+#    longest_variant = split(keys(filter((k,v) -> length(v) == maximum(variants_lengths),variants_dict)[1]))[2]
     
-    #println("$gene_name : longer variant = $longer_variant")
+    #println("$gene_name : longer variant = $longest_variant")
 
   else # if unannotated
     gene_name = "$splitted_fasta_files"
@@ -769,7 +687,7 @@ if level == "gene"
          #println("genome count : $genome_count")
           if genome_count == "1" || genome_count == "0"#if the kmer is present/unique or does not exist (splicing?) on the genome
             mer_regex = Regex(mer)
-            variants_containing_this_kmer = keys(filter(v -> occursin(mer_regex, v.second), variants_dico))
+            variants_containing_this_kmer = keys(filter(v -> occursin(mer_regex, v.second), variants_dict))
             if stringent_option == true && Float64(transcriptome_count) == Float64(nb_variants) == Float64(length(variants_containing_this_kmer)) 
                 #println("specific kmer found !")
               i = i+1
@@ -836,6 +754,14 @@ step_time = Float64(time()-startt)
 #println("step time : $step_time")
 end # end of kmer analysis
 #println("$level $gene_name : $i specific kmers found")
+
+# create tags directory
+if ! isdir("$output/tags")
+    mkdir("$output/tags")
+end
+if ! isdir("$output/tags/$kmer_length")
+    mkdir("$output/tags/$kmer_length")
+end
 
 writedlm("$output/tags/$kmer_length/$tag_file",
 reshape(fasta_array,length(fasta_array)), "\n")

@@ -16,12 +16,13 @@ Interpretations of counts will differ, depending of the “level” option :
 ## Dependencies :
 
 - Kmerator is a julia script : Julia => v0.5 (https://julialang.org/downloads/)
-- Julia packages : open julia and type
-Pkg.add(“ParallelDataTransfer”)
-Pkg.add(“ArgParse”)
-Pkg.add(“FastaIO”)
-Pkg.add(“RCall”) (temporary dependency, will be removed in next version)
-
+- Install Julia packages : open julia and type
+```
+        Pkg.add(“ParallelDataTransfer”)
+        Pkg.add(“ArgParse”)
+        Pkg.add(“FastaIO”)
+        Pkg.add(“RCall”) (temporary dependency, will be removed in next version)
+```
 - R + (stringi) & rjson libraries (temporary dependency, will be removed in next version)
 - Jellyfish 2.0
 
@@ -56,7 +57,8 @@ julia -p [nb-threads] kmerator.jl [--selection [SELECTION...]] [--appris APPRIS]
   -u, --unannotated     activated if the provided initial fasta file
                         correspond to an annotation external from
                         Ensembl. 
-  -s, --stringent       FOR GENE LEVEL ONLY : If you want select tags present in ALL variants of the corresponding gene 
+  -s, --stringent       FOR GENE LEVEL ONLY : If you want select tags present 
+                        in ALL variants of the corresponding gene 
   -v, --verbose         If you want this script talk too much
   -g, --genome GENOME   the genome fasta (.fa) or index by jellyfish
                         for kmer request
