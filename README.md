@@ -15,9 +15,9 @@ Interpretations of counts will differ, depending of the “level” option :
 
 ## Dependencies :
 
-- Kmerator is a julia script : Julia => v0.5 (https://julialang.org/downloads/).
-- kmerator ask to install missing packages automatically so it is no need to install 
-ParallelDataTransfer, ArgParse, FastaIO, JSON and HTTP.
+- Kmerator is a julia script : Julia => v1.1 (https://julialang.org/downloads/).
+- kmerator ask to install missing packages automatically so you may not install 
+Distributed, ParallelDataTransfer, ArgParse, FastaIO, JSON and HTTP packages.
 - Jellyfish 2.0
 
 
