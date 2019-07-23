@@ -10,7 +10,7 @@ println("
 |____|__ \\|_| |_| |_\\___|_|  \\__,_|\\__\\___/|_|     
         \\/                                              
 -------------------------------------------------- 
-      VERSION v0.1.1
+      VERSION v0.2.0
 
 Dependencies :
 - Julia language >= v1.2
@@ -54,82 +54,85 @@ end
 check_installed_pkg()
 
 using Distributed
-@everywhere using Dates
-@everywhere using DelimitedFiles
-using  ParallelDataTransfer
 using HTTP
 using JSON
-using ArgParse 
-@everywhere using FastaIO
+using ArgParse
 
 
 
-## parse argument
-s = ArgParseSettings()
-@add_arg_table s begin
-    "--selection"
-        help = "list of gene to select directly inside your fasta transcriptome file"
-        action = :append_arg 
-        nargs = '*'
-    "--appris"
-        help = """indicate: 'homo_sapiens', 'mus_musculus', 'rattus_norvegicus',
-            'danio_rerio', 'sus_scrofa', or virtually any specie available on 
-            APPRIS database (Rodriguez JM, Rodriguez-Rivas J, Domenico TD, 
-            Vázquez J, Valencia A, and Tress ML. Nucleic Acids Res. Database 
-            issue; 2017 Oct 23.). A gene have multiple possible sequence depending 
-            of its variants. this option select the principal transcript of a gene, 
-            based of APPRIS database, or by length if no data or no connection. 
-            If 'APPRIS option and not available data or no principal transcript 
-            (non-coding genes), use length instead"""
-        arg_type = String
-    "--unannotated", "-u"
-        action = :store_true
-        help = """activated if the provided initial fasta file correspond to an 
-            annotation external from Ensembl. Otherwise, use ensembl fasta files !"""
-    "--stringent", "-s"
-        action = :store_true
-        help = """if you think a gene-specific tag must be unique but present in 
-            ALL KNOWN TRANSCRIPT, if false, the kmer is considered as gene-specific 
-            is present only in variant of the corresponding gene, independently 
-            of the number know variant containing the kmer"""
-    "--verbose", "-v"
-        action = :store_true
-        help = "If you want this script talk too much"
-    "--genome", "-g"
-        help = "the genome fasta (.fa) or index by jellyfish for kmer request"
-        #type = String
-        required = true
-    "--transcriptome", "-t"
-        help = """the transcriptome fasta (.fa) (FASTA ONLY) for kmer request 
-            and transcriptional variant informations"""
-        #type = String
-        required = true
-    "--level", "-l"
-        help = """type 'gene', 'transcript' or 'chimera' to extract specific 
-            kmer at these different levels. 'chimera' option must be done with 
-            'unannotated' option!."""
-        required = true
-    "--output", "-o"
-        help = "directory of output"
-        default = "output"
-    "--length"
-        help = "length required for the kmer generation"
-        default = 31
-        arg_type = Int
-    "fasta_file" #argument, no option
-        help = "the fasta input file"
-        required = true
-    "--threshold"
-        help = """FOR GENE LEVEL ONLY : Minimum fraction of annotated transcripts 
-            containing this kmer to admit it (default 0)"""
-        default = 0.5
-        arg_type = Float64
+function parse_commandline()
+    ## parse argument
+    s = ArgParseSettings()
+    @add_arg_table s begin
+        "--selection"
+            help = "list of gene to select directly inside your fasta transcriptome file"
+            action = :append_arg 
+            nargs = '*'
+        "--appris"
+            help = """indicate: 'homo_sapiens', 'mus_musculus', 'rattus_norvegicus',
+                'danio_rerio', 'sus_scrofa', or virtually any specie available on 
+                APPRIS database (Rodriguez JM, Rodriguez-Rivas J, Domenico TD, 
+                Vázquez J, Valencia A, and Tress ML. Nucleic Acids Res. Database 
+                issue; 2017 Oct 23.). A gene have multiple possible sequence depending 
+                of its variants. this option select the principal transcript of a gene, 
+                based of APPRIS database, or by length if no data or no connection. 
+                If 'APPRIS option and not available data or no principal transcript 
+                (non-coding genes), use length instead"""
+            arg_type = String
+        "--unannotated", "-u"
+            action = :store_true
+            help = """activated if the provided initial fasta file correspond to an 
+                annotation external from Ensembl. Otherwise, use ensembl fasta files !"""
+        "--stringent", "-s"
+            action = :store_true
+            help = """if you think a gene-specific tag must be unique but present in 
+                ALL KNOWN TRANSCRIPT, if false, the kmer is considered as gene-specific 
+                is present only in variant of the corresponding gene, independently 
+                of the number know variant containing the kmer"""
+        "--verbose", "-v"
+            action = :store_true
+            help = "If you want this script talk too much"
+        "--genome", "-g"
+            help = "the genome fasta (.fa) or index by jellyfish for kmer request"
+            #type = String
+            required = true
+        "--transcriptome", "-t"
+            help = """the transcriptome fasta (.fa) (FASTA ONLY) for kmer request 
+                and transcriptional variant informations"""
+            #type = String
+            required = true
+        "--level", "-l"
+            help = """type 'gene', 'transcript' or 'chimera' to extract specific 
+                kmer at these different levels. 'chimera' option must be done with 
+                'unannotated' option!."""
+            required = true
+        "--output", "-o"
+            help = "directory of output"
+            default = "output"
+        "--length"
+            help = "length required for the kmer generation"
+            default = 31
+            arg_type = Int
+        "--procs", "-p"
+            help = "Run n local processes"
+            arg_type = Int
+        "fasta_file" #argument, no option
+            help = "the fasta input file"
+            required = true
+        "--threshold"
+            help = """FOR GENE LEVEL ONLY : Minimum fraction of annotated transcripts 
+                containing this kmer to admit it (default 0)"""
+            default = 0.5
+            arg_type = Float64
+    end
+    return parse_args(s)
 end
 
-parsed_args = parse_args(ARGS, s)
 
-##### Set variables
+
 function set_variables()
+    ## Verbose
+    global verbose_option = parsed_args["verbose"]
     ## Output
     global output = parsed_args["output"]
     if occursin(r"\/$", output)
@@ -143,10 +146,8 @@ function set_variables()
     ## APPRIS
     global APPRIS_option = parsed_args["appris"]
     if APPRIS_option != nothing
-        println("APPRIS selection of principal transcripts for $APPRIS_option" )
+        if verbose_option println("APPRIS selection of principal transcripts for $APPRIS_option" ) end
     end
-    ## Verbose
-    global verbose_option = parsed_args["verbose"]
     ## Unannotated option
     global unannotated_option = parsed_args["unannotated"]
     ## Stringent option
@@ -162,7 +163,11 @@ function set_variables()
     ## Fasta file option (input sequences file)
     global fastafile = parsed_args["fasta_file"]
     ## Threads number
-    global nbthreads =  nworkers()
+    if isa(parsed_args["procs"], Number)
+        global nbthreads = parsed_args["procs"]
+    else
+        nbthreads = 1
+    end
     ## Level of kmer specificity
     global level = parsed_args["level"]
     ## Show options if verbose option
@@ -186,7 +191,13 @@ function set_variables()
 end
 
 
-##### Options verification part
+function add_workers()
+    if isa(parsed_args["procs"], Number) 
+            addprocs(parsed_args["procs"])
+    end
+end
+
+
 function checkup_variables()
     ## test genome file
     if ! isfile(genome)
@@ -238,7 +249,8 @@ end
 
 
 function load_transcriptome(transcriptome_file)
-    if verbose_option println("\ncreate dictionary of transcriptome fasta") end
+    ! verbose_option ? print("\r") : println("------------")
+    print("\nCreate dictionary of transcriptome fasta ")
     transcriptome_dict = Dict{String,String}()
     FastaReader(transcriptome_file) do fr
         if unannotated_option == true
@@ -267,32 +279,36 @@ function load_transcriptome(transcriptome_file)
 end
 
 
-function run_jellyfish(genome, transcriptome)
+function run_jellyfish(genome, transcriptome_fa)
     jf_dir = "$output/jellyfish_indexes/$kmer_length"
     
     ## run jellyfish on Transcriptome
-    if verbose_option println("\nBegining jellyfish on Transcriptome.") end
-    jf_transcriptome = replace(basename(transcriptome), ".fa" => ".jf")
+    ! verbose_option ? print("\r") : println("------------")
+    print("Compute jellyfish on Transcriptome       ")
+    jf_transcriptome = replace(basename(transcriptome_fa), ".fa" => ".jf")
     run(`mkdir -p $jf_dir`)
-    run(`echo jellyfish count -m $kmer_length -s 10000 -t $nbthreads -o $jf_dir/$jf_transcriptome $transcriptome`)
-    if verbose_option println("Transcriptome kmer index output: $jf_dir/$jf_transcriptome.") end
+    run(`jellyfish count -m $kmer_length -s 10000 -t $nbthreads -o $jf_dir/$jf_transcriptome $transcriptome_fa`)
+    global transcriptome = "$output/jellyfish_indexes/$kmer_length/$(replace(basename(transcriptome_fa), ".fa" => ".jf"))"
+    if verbose_option println("\nTranscriptome kmer index output: $jf_dir/$jf_transcriptome.") end
     
     ## run jellyfish on genome if genome is fasta file
     if occursin(r".*\.(fa|fasta)$", genome)
-        if verbose_option println("\nBegining jellyfish on Genome.") end
+        ! verbose_option ? print("\r") : println("------------")
+        print("Compute jellyfish on Genome              ")
         jf_genome = replace(basename(genome), ".fa" => ".jf")
         run(`jellyfish count -C -m $kmer_length -s 10000 -t $nbthreads -o $jf_dir/$jf_genome $genome`)
-        if verbose_option println("Genome kmer index output: $jf_dir/$jf_genome.") end
+        if verbose_option println("\nGenome kmer index output: $jf_dir/$jf_genome.") end
     end
 end
 
 
-APPRIS_function = function(gene_ref)
-    if verbose_option println("-----\nStarting APPRIS function") end
+function APPRIS_function(gene_ref)
+    ! verbose_option ? print("\r") : println("------------")
+    print("Find best isoform on APPRIS database for $gene_ref ")
     #### Request to appris
     url = "http://apprisws.bioinfo.cnio.es/rest/exporter/id/$APPRIS_option/" * 
             "$gene_ref?methods=appris&format=json&sc=ensembl"
-    if verbose_option println("APPRIS url: $url") end
+    if verbose_option println("\nAPPRIS url: $url") end
     ## make_API_call(url)
     function http_req(url)
         try
@@ -301,7 +317,7 @@ APPRIS_function = function(gene_ref)
             res = JSON.Parser.parse(res)
             return res
         catch err
-            println("ERROR:\n $err")
+            if verbose_option println("ERROR:\n $err") end
             res = "NODATA"
             return res
         end
@@ -317,7 +333,7 @@ APPRIS_function = function(gene_ref)
         end
     end
     
-    #### find better isoform
+    #### find best isoform
     ## find Principals
     principals = []
     for (i,value) in enumerate(transcripts)
@@ -330,8 +346,10 @@ APPRIS_function = function(gene_ref)
     end
     ## if not principals, return NODATA
     if isempty(principals)
-        println("No principal isoforms detected, this function will return " * 
-                    "'NODATA' and the longest transcript will be selected")
+        if verbose_option
+            println("No principal isoforms detected, this function will return " * 
+                        "'NODATA' and the longest transcript will be selected")
+        end
         return(transcripts)
     end
     if verbose_option println("principals: $principals") end
@@ -343,12 +361,12 @@ APPRIS_function = function(gene_ref)
     levels = map(x-> parse(Int, x), levels)
     level = minimum(levels)
     ## if multiple transcripts with better Principal, select biggest
-    selected_transcripts = hcat(map(x -> try x["transcript_id"] catch 
-                                            end, transcripts),
-                                map(x -> try parse(Int, x["length_na"]) catch 
-                                            end, transcripts),  
-                                map(x -> try x["reliability"] catch 
-                                            end, transcripts))
+    selected_transcripts = hcat(map(x -> try x["transcript_id"] 
+                                         catch end, transcripts),
+                                map(x -> try parse(Int, x["length_na"]) 
+                                         catch end, transcripts),  
+                                map(x -> try x["reliability"] 
+                                         catch end, transcripts))
     selected_transcripts = selected_transcripts[map(x -> x != nothing, selected_transcripts[:, 3]), :]
     selected_transcripts = selected_transcripts[map(x -> occursin("PRINCIPAL:$level",x), selected_transcripts[:, 3]), :]
     max_length = maximum(selected_transcripts[:,2])
@@ -361,7 +379,7 @@ APPRIS_function = function(gene_ref)
 end # end of APPRIS function
 
 
-find_longest_variant = function(gene_name, transcriptome_dict)
+function find_longest_variant(gene_name, transcriptome_dict)
     if verbose_option println("-----\nStarting find_longest_variant function") end
     gene_name = replace(gene_name, "@SLASH@" => "/")
     nb_variants = length(filter(k -> startswith(k.first, "$gene_name:"), transcriptome_dict))
@@ -382,7 +400,6 @@ find_longest_variant = function(gene_name, transcriptome_dict)
 end
 
 
-
 function build_sequences()
     if verbose_option println("----------\nBegining Build_sequences function") end
     ## split each sequence of fasta input file into individual fastas
@@ -400,13 +417,10 @@ function build_sequences()
                 ensembl_transcript_name = split(desc_array[1],'.')[1]
                 ensembl_gene_name = split(replace(desc_array[4], "gene:" => ""), '.')[1]
                 # println("ensembl gene name : $ensembl_gene_name")
-                # println("ensembl transcript name : $ensembl_transcript_name")
-                # println("gene name : $gene_name")
-                # println("test to see if gene name in list")
                 ## engage this loop only if the gene have not been already processed (otherwise, the gene will be processed n times, n being the number of transcripts of the same genes in the reference fasta)
                 if isempty(select_option) || (select_option != nothing && (gene_name in select_option || ensembl_transcript_name in select_option || ensembl_gene_name in select_option)) && (gene_name in genes_already_processed) == false
-                    # take all sequence corresponding to asked gene names (select option)
-                    # take all if select_option not provided
+                    ## take all sequence corresponding to asked gene names (select option)
+                    ## take all if select_option not provided
                     if APPRIS_option != nothing && (gene_name in genes_analysed) == false
                         APPRIS_transcript = APPRIS_function(ensembl_gene_name) 
                         # println("APPRIS selected variant : $APPRIS_transcript")
@@ -415,9 +429,9 @@ function build_sequences()
                     # println("$ensembl_transcript_name")
                     # println("marqueur ici : $gene_name")
                     if APPRIS_option == nothing || (APPRIS_option != nothing && ensembl_transcript_name == APPRIS_transcript) || (APPRIS_option != nothing && APPRIS_transcript == "NODATA" && "$gene_name:$ensembl_transcript_name" == find_longest_variant(gene_name,transcriptome_dict)) 
-                        println("ensembl_transcript_name : $ensembl_transcript_name")
+                        if verbose_option println("ensembl_transcript_name : $ensembl_transcript_name") end
                         if length("$seq") >= kmer_length 
-                            println("$gene_name:$ensembl_transcript_name : good length, continue")
+                            if verbose_option println("$gene_name:$ensembl_transcript_name : good length, continue") end
                             gene_name = replace(gene_name, "/" => "@SLASH@") # some genes names can caontain some slash characters, break the processus
                             FastaWriter("$output/sequences/$kmer_length/$gene_name:$ensembl_transcript_name.fa") do fwsequence
                                 write(fwsequence, [">$gene_name:$ensembl_transcript_name", "$seq"])
@@ -429,15 +443,19 @@ function build_sequences()
                     end
                 end
             end
-            #println("genes analysed : $genes_analysed")
-            #println("genes analysed (unique): $(unique(genes_analysed))")
+            # println("genes analysed : $genes_analysed")
             for i in unique(genes_analysed)
                 # println("in genes already expressed : $(i in genes_already_processed)")
-                # it can happen that APPRIS contain obscolete id or other error, in this case the longer variant is selected for the concerned genes (passed in loop but have not provided a "sequence" fasta)
+                ## it can happen that APPRIS contain obsolete id or other error, in this case the longer variant is selected for the concerned genes (passed in loop but have not provided a "sequence" fasta)
                 if (replace(i, "/" => "@SLASH@") in genes_already_processed) == false
-                    println("ERROR : There is a problem with $i, APPRIS function have not worked properly, sometimes an outdated APPRIS reference, in this case the longer transcript is selected from the reference fasta")
-                    id = find_longest_variant(i,transcriptome_dict)
-                    #println(transcriptome_dict["$id"])
+                    if verbose_option
+                        println("""WarningAppris : There is a problem with $i, 
+                            \rAPPRIS function have not worked properly, sometimes 
+                            \ran outdated APPRIS reference, in this case the longer 
+                            \rtranscript is selected from the reference fasta""")
+                    end
+                    id = find_longest_variant(i, transcriptome_dict)
+                    # println(transcriptome_dict["$id"])
                     FastaWriter("$output/sequences/$kmer_length/$(replace(id, "/" => "@SLASH@"))") do fwsequence
                         write(fwsequence, [">$id", string(transcriptome_dict["$id"])])
                     end
@@ -468,28 +486,24 @@ function build_sequences()
     if verbose_option println("Build_sequences function finished-----") end
 end
 
+
+
+parsed_args = parse_commandline()
 set_variables()
+add_workers()
+@everywhere using Dates
+@everywhere using DelimitedFiles
+@everywhere using FastaIO
+using  ParallelDataTransfer
 checkup_variables()
 transcriptome_dict = load_transcriptome(transcriptome)
 run_jellyfish(genome, transcriptome)
 build_sequences()
 
 
-#~ APPRIS_transcript = APPRIS_function("ENSG00000103351")
-#~ println("APPRIS_transcript: $APPRIS_transcript")
-
-#~ longest_variant = find_longest_variant("CLUAP1", transcriptome_dict)
-#~ println("find_longest_variant: $longest_variant")
-
-
-################################################################################ 
-println("EOF"), exit() ######################################################### 
-################################################################################
-
-
-
-@passobj 1 workers() transcriptome_dict
 @passobj 1 workers() unannotated_option
+@passobj 1 workers() verbose_option
+@passobj 1 workers() transcriptome_dict
 @passobj 1 workers() genome
 @passobj 1 workers() transcriptome
 @passobj 1 workers() level
@@ -499,276 +513,156 @@ println("EOF"), exit() #########################################################
 @passobj 1 workers() admission_threshold
 
 
-#Create the function f for extraction of specifics kmers for one sequence fasta
-#file.
-
-#print cleared lines used by replace_line function
-
-for _ in 1:nworkers()
-print("\n")
-end
-
-#for splitted_fasta_files in readdir("$output/sequences/$kmer_length/")
+## function for extraction of specifics kmers for one sequence fasta file.
 @everywhere function f(splitted_fasta_files)
-#store worker id and X variable, for line replacement (if one core, one line up, if worker 3, 2 lines up)
-if(myid() == 1) X = myid() else X = myid()-1 end
-sleep(2)
-
-
-enlapsed_time = 0
-step_time = 0
-kmers_analysed = 0
-
-
-replace_line = function(nbline::Int64, x::String)
-print(string("\u1b[$(nbline)F\u1b[2K"*"$x"*"\u1b[$(nbline)E"))
-end
-
-#println("$splitted_fasta_files")
-#println(transcriptome_dict)
-
-# manage the name of transcript/gene
-  if unannotated_option == false # if annotated
-    gene_name = split(splitted_fasta_files, ":")[1]
-#    println("$gene_name")
-    transcript_name = split(splitted_fasta_files, ":")[2]
-#    test = filter((k -> startswith(k.frist, "$gene_name:"), transcriptome_dict)
-#    println(test)
-    nb_variants = length(filter(k -> startswith(k.first, "$gene_name:"), transcriptome_dict))
-#    println("nb variants : $nb_variants")
-    variants_dict = filter(k -> startswith(k.first, "$gene_name:"), transcriptome_dict)
-    #println("variants dico : $variants_dict")
-#    variants_lengths = Vector{Any}()
-#    for (k,v) in variants_dict
-#        println(k)
-#        println(v)
-#      push!(variants_lengths, length(v))
-#    end
-
-#    longest_variant = split(keys(filter((k,v) -> length(v) == maximum(variants_lengths),variants_dict)[1]))[2]
-    
-    #println("$gene_name : longer variant = $longest_variant")
-
-  else # if unannotated
-    gene_name = "$splitted_fasta_files"
-    transcript_name = "$splitted_fasta_files"
-  end
-#println("level : $level")
-if level == "gene"
-  tag_file = "$gene_name-$transcript_name-gene_specific.fa"
-end
-if level == "transcript"
-  tag_file = "$gene_name-$transcript_name-transcript_specific.fa"
-end
-if level == "chimera"
-  tag_file = "$gene_name-chimera_specific.fa"
-end
-
-
-fasta_array = Array([])
-
-
-
-# take the transcript sequence for jellyfish query
-sequence_fasta = "error if seen"
-FastaReader("$output/sequences/$kmer_length/$splitted_fasta_files") do fr
-for (desc, seq) in fr
-#    println("$desc")
-  sequence_fasta = "$seq"
-end
-end
-#println("$sequence_fasta")
-#println("")
-
-remotecall(replace_line, 1 , X, "worker number $(myid()), for $level $gene_name, reporting for duty ! :)\n")
-
-#global genome
-  kmercounts_genome = read(`jellyfish query -s "$output/sequences/$kmer_length/$splitted_fasta_files" "$genome"`,String)
-#print(kmercounts_genome)
-remotecall(replace_line, 1 , X, "jellyfish query on genome.jl finished")
-  kmercounts_transcriptome = read(`jellyfish query -s "$output/sequences/$kmer_length/$splitted_fasta_files" "$transcriptome"`,String)
-#print(kmercounts_transcriptome)
-remotecall(replace_line, 1 , X, "jellyfish query on transcriptome.jl finished")
-#println("jellyfish query on transcriptome.jf finished")
-
-
-
-kmercounts_genome = split(kmercounts_genome, "\n")[1:end-1]
-kmercounts_genome_dico = Dict()
-for mer in kmercounts_genome
-mer = split(mer)
-#println(mer)
-counts = mer[2]
-seq = mer[1]
-kmercounts_genome_dico["$seq"] = counts
-#println(typeof(keys(kmercounts_genome_dico)))
-end
-
-kmercounts_transcriptome_dico = Dict()
-kmercounts_transcriptome = split(kmercounts_transcriptome, "\n")[1:end-1]
-for mer in kmercounts_transcriptome
-mer = split(mer)
-counts = mer[2]
-seq = mer[1]
-kmercounts_transcriptome_dico["$seq"] = counts
-#println(typeof(keys(kmercounts_transcriptome_dico)))
-
-end
-
-
-
-#initialisation of count variables
-i = 0
-
-#println(length(kmercounts_transcriptome_dico))
-total_kmers = length(keys(kmercounts_transcriptome_dico))
-## create a new dictionary containing starts of kmers coordinates, to index
-#kmers by their place on the sequence
-kmer_starts = Dict()
-kmer_placed = 0
-#println("start processing kmer place on input sequence")
-#total_kmer_number = length(keys(kmercounts_transcriptome_dico))
-
-
-for mer in keys(kmercounts_transcriptome_dico)
-kmer_placed = kmer_placed +1
-
-remotecall(replace_line, 1 , X, "kmers placed = $kmer_placed on $total_kmers")
-#println("sequence : $sequence_fasta")
-#println("mer : $mer")
-findfirst("$sequence_fasta", "$mer")
-kmer_interval = findfirst("$mer","$sequence_fasta")
-#println(kmer_interval)
-kmer_start = minimum(collect(kmer_interval))
-#kmer_end = maximum(collect(kmer_interval))
-kmer_starts["$mer"] = kmer_start
-end
-
-#for mer in keys(kmercounts_transcriptome_dico)
-for tuple in sort(collect(zip(values(kmer_starts),keys(kmer_starts))))
-##for now, I can only have a sorted array of tuples, I have to extract sequence
-#for each tuple
-mer = last(tuple)
-startt = time()
-kmers_analysed = kmers_analysed + 1
-per = round(kmers_analysed/total_kmers*100)
-enlapsed_time = enlapsed_time + step_time
-if enlapsed_time == 0
-  time_remaining = 0
-else
-  time_remaining = Integer(ceil((total_kmers - kmers_analysed)/(kmers_analysed/enlapsed_time)))
-end
-ptime = Dates.canonicalize(Dates.CompoundPeriod(Dates.Second(time_remaining)))
-ptime = time_remaining
-#println("time : $ptime")  
-remotecall(replace_line, 1 , X, "$level $gene_name : $kmers_analysed kmers analysed ( $per %)  ,$i specifics,:remaining time -> $ptime sec.")
-
-#println("-------------------------------------------------------------------------------------------")
-
-if !any(x->x == "$mer", keys(kmercounts_genome_dico))
-
-    #println("$mer not defined : reversed ?")
-  d = Dict("A"=>"T", "C"=> "G", "G"=>"C", "T"=>"A")
-  new_mer = reverse(replace(mer, r"[ACGT]{1}" => x->d[x]))  # "TGCA"
-  #println("$(String(reverse_complement!(dna"$mer"))))")
-  genome_count = kmercounts_genome_dico["$new_mer"]
-  #println("genome count : $genome_count")
-else
-
-genome_count = kmercounts_genome_dico["$mer"]
-
-end
-
-transcriptome_count = parse(Float64, kmercounts_transcriptome_dico["$mer"])
-#println("transcriptome count : $transcriptome_count")
-
-#println("transcriptome count : $(typeof(transcriptome_count))")
-if level == "gene"
-         #println("genome count : $genome_count")
-          if genome_count == "1" || genome_count == "0"#if the kmer is present/unique or does not exist (splicing?) on the genome
-            mer_regex = Regex(mer)
-            variants_containing_this_kmer = keys(filter(v -> occursin(mer_regex, v.second), variants_dict))
-            if stringent_option == true && Float64(transcriptome_count) == Float64(nb_variants) == Float64(length(variants_containing_this_kmer)) 
-                #println("specific kmer found !")
-              i = i+1
-                tmp = length(variants_containing_this_kmer)
-              push!(fasta_array,">$gene_name-$transcript_name.kmer$i ($tmp/$nb_variants)")
-              push!(fasta_array,"$mer")
-
-          elseif stringent_option == false && Float64(transcriptome_count) == Float64(length(variants_containing_this_kmer)) && Float64( transcriptome_count) > Float64( nb_variants*admission_threshold)
-
-                #println("specific kmer found")
-                i = i+1
-                tmp = length(variants_containing_this_kmer)
-              push!(fasta_array,">$gene_name-$transcript_name.kmer$i ($tmp/$nb_variants)" )
-              push!(fasta_array, "$mer")
-
-            elseif unannotated_option == true && Float64(transcriptome_count) == Float64(0)
-
-              i = i+1
-              push!(fasta_array,">$gene_name-$transcript_name.kmer$i" )
-              push!(fasta_array,"$mer")
-
-          end #end of fasta writing function
-        
-          #FastaWriter("$output/tags/$kmer_length/$tag_file") do fw
- #         writedlm("$output/tags/$kmer_length/$tag_file", transpose(fasta_array), "\n")
+    myid() == 1 ? X = myid() : X = myid()-1
+    elapsed_time = 0
+    step_time = 0
+    kmers_analysed = 0
+    replace_line = function(nbline::Int64, x::String)
+        print(string("\u1b[$(nbline)F\u1b[2K"*"$x"*"\u1b[$(nbline)E"))
+    end
+    if ! unannotated_option          # if annotated
+        gene_name, transcript_name = split(splitted_fasta_files, ":")
+        nb_variants = length(filter(k -> startswith(k.first, "$gene_name:"), transcriptome_dict))
+        if verbose_option println("gene_name: $gene_name --- transcript_name: $transcript_name --- nb variants : $nb_variants") end
+        variants_dict = filter(k -> startswith(k.first, "$gene_name:"), transcriptome_dict)
+    else                            # if unannotated
+        gene_name = transcript_name = "$splitted_fasta_files"
+        if verbose_option println("gene_name = transcript_name: $transcript_name") end
+    end
+    ## Determine tag-file 
+    if level == "gene"
+        tag_file = "$gene_name-$transcript_name-gene_specific.fa"
+    elseif level == "transcript"
+        tag_file = "$gene_name-$transcript_name-transcript_specific.fa"
+    elseif level == "chimera"
+        tag_file = "$gene_name-chimera_specific.fa"
+    end
+    fasta_array = Array([])
+    # take the transcript sequence for jellyfish query
+    sequence_fasta = "error if seen"
+    FastaReader("$output/sequences/$kmer_length/$splitted_fasta_files") do fr
+        for (desc, seq) in fr
+            sequence_fasta = seq
         end
-  end
-
-
-  #println("$genome_count")
-if level == "transcript"
-  #println("$genome_count")
-  #println("$transcriptome_count")
-  #println(parse(Int, genome_count) <= 1 )
-  #println(Float64(transcriptome_count) == Float64(0))
-  if unannotated_option == true && Float64(transcriptome_count) == Float64(0) && parse(Int, genome_count) <= 1
-      i = i+1
-              push!(fasta_array,">$gene_name.kmer$i")
-              push!(fasta_array,"$mer")
-
-  elseif Float64(transcriptome_count) == Float64(1) && parse(Int, genome_count) <= 1
-    i = i+1
-              push!(fasta_array,">$gene_name-$transcript_name.kmer$i")
-              push!(fasta_array,"$mer")
-  end
- end
-
-if level == "chimera" && unannotated_option == true
-    #println("$genome_count")
-    #println("$transcriptome_count")
-
-    #println(parse(Int, genome_count) == 0 )
-    #println(Float64(transcriptome_count) == Float64(0))
-  if Float64(transcriptome_count) == Float64(0) && parse(Int, genome_count) == 0
-    #println("YES")
-    i = i+1
-              push!(fasta_array,">$gene_name.kmer$i")
-              push!(fasta_array,"$mer")
-  end
-  end
-
-
-step_time = Float64(time()-startt)
-#println("step time : $step_time")
-end # end of kmer analysis
-#println("$level $gene_name : $i specific kmers found")
-
-# create tags directory
-if ! isdir("$output/tags")
-    mkdir("$output/tags")
-end
-if ! isdir("$output/tags/$kmer_length")
-    mkdir("$output/tags/$kmer_length")
-end
-
-writedlm("$output/tags/$kmer_length/$tag_file",
-reshape(fasta_array,length(fasta_array)), "\n")
+    end
+    if verbose_option remotecall(replace_line, 1 , X, "worker number $(myid()), for $level $gene_name, reporting for duty ! :)\n") end
+    ## build kmer count dictionnary from genome
+    kmercounts_genome = read(`jellyfish query -s "$output/sequences/$kmer_length/$splitted_fasta_files" "$genome"`, String)
+    if verbose_option remotecall(replace_line, 1 , X, "jellyfish query $splitted_fasta_files on $genome finished") end
+    kmercounts_genome = split(kmercounts_genome, "\n")[1:end-1]
+    kmercounts_genome_dict = Dict()
+    for mer in kmercounts_genome
+        mer = split(mer)
+        counts = mer[2]
+        seq = mer[1]
+        kmercounts_genome_dict["$seq"] = counts
+    end
+    ## build kmer count dictionnary from transcriptome
+    kmercounts_transcriptome = read(`jellyfish query -s "$output/sequences/$kmer_length/$splitted_fasta_files" "$transcriptome"`, String)
+    if verbose_option remotecall(replace_line, 1 , X, "jellyfish query on transcriptome.jf finished") end
+    kmercounts_transcriptome_dict = Dict()
+    kmercounts_transcriptome = split(kmercounts_transcriptome, "\n")[1:end-1]
+    for mer in kmercounts_transcriptome
+        mer = split(mer)
+        counts = mer[2]
+        seq = mer[1]
+        kmercounts_transcriptome_dict["$seq"] = counts
+    end
+    ## initialisation of count variables
+    i = 0
+    total_kmers = length(keys(kmercounts_transcriptome_dict))
+    
+    ## create a new dictionary containing starts of kmers coordinates, to index
+    ## kmers by their place on the sequence
+    kmer_starts = Dict()
+    kmer_placed = 0
+    for mer in keys(kmercounts_transcriptome_dict)
+        kmer_placed = kmer_placed +1
+        if verbose_option remotecall(replace_line, 1 , X, "kmers placed = $kmer_placed on $total_kmers") end
+        kmer_interval = findfirst("$mer", "$sequence_fasta")
+        kmer_start = minimum(collect(kmer_interval))
+        kmer_starts["$mer"] = kmer_start
+    end
+    
+    for tuple in sort(collect(zip(values(kmer_starts),keys(kmer_starts))))
+        ## for now, I can only have a sorted array of tuples, I have to extract 
+        ## sequence for each tuple
+        mer = last(tuple)
+        startt = time()
+        kmers_analysed = kmers_analysed + 1
+        per = round(kmers_analysed/total_kmers*100)
+        elapsed_time = elapsed_time + step_time
+        if elapsed_time == 0
+            time_remaining = 0
+        else
+            time_remaining = Integer(ceil((total_kmers - kmers_analysed)/(kmers_analysed/elapsed_time)))
+        end
+        ptime = Dates.canonicalize(Dates.CompoundPeriod(Dates.Second(time_remaining)))
+        ptime = time_remaining
+        remotecall(replace_line, 1 , X, "$level $gene_name : $kmers_analysed kmers analysed ( $per %)  ,$i specifics,:remaining time -> $ptime sec.")
+        
+        if !any(x->x == "$mer", keys(kmercounts_genome_dict))
+            d = Dict("A"=>"T", "C"=> "G", "G"=>"C", "T"=>"A")
+            new_mer = reverse(replace(mer, r"[ACGT]{1}" => x->d[x]))  # "TGCA"
+            genome_count = kmercounts_genome_dict["$new_mer"]
+        else
+            genome_count = kmercounts_genome_dict["$mer"]
+        end
+        transcriptome_count = parse(Float64, kmercounts_transcriptome_dict["$mer"])
+        if level == "gene"
+            ## if the kmer is present/unique or does not exist (splicing?) on the genome
+            if genome_count == "1" || genome_count == "0" 
+                mer_regex = Regex(mer)
+                variants_containing_this_kmer = keys(filter(v -> occursin(mer_regex, v.second), variants_dict))
+                if stringent_option == true && Float64(transcriptome_count) == Float64(nb_variants) == Float64(length(variants_containing_this_kmer)) 
+                    i = i+1
+                    tmp = length(variants_containing_this_kmer)
+                    push!(fasta_array,">$gene_name-$transcript_name.kmer$i ($tmp/$nb_variants)")
+                    push!(fasta_array,"$mer")
+                elseif stringent_option == false && Float64(transcriptome_count) == Float64(length(variants_containing_this_kmer)) && Float64( transcriptome_count) > Float64( nb_variants*admission_threshold)
+                    i = i+1
+                    tmp = length(variants_containing_this_kmer)
+                    push!(fasta_array,">$gene_name-$transcript_name.kmer$i ($tmp/$nb_variants)" )
+                    push!(fasta_array, "$mer")
+                elseif unannotated_option == true && Float64(transcriptome_count) == Float64(0)
+                    i = i+1
+                    push!(fasta_array,">$gene_name-$transcript_name.kmer$i" )
+                    push!(fasta_array,"$mer")
+                end # end of fasta writing function
+            end
+        end
+        if level == "transcript"
+            if unannotated_option == true && Float64(transcriptome_count) == Float64(0) && parse(Int, genome_count) <= 1
+                i = i+1
+                push!(fasta_array,">$gene_name.kmer$i")
+                push!(fasta_array,"$mer")
+            elseif Float64(transcriptome_count) == Float64(1) && parse(Int, genome_count) <= 1
+                i = i+1
+                push!(fasta_array,">$gene_name-$transcript_name.kmer$i")
+                push!(fasta_array,"$mer")
+            end
+        end
+        if level == "chimera" && unannotated_option == true
+            if Float64(transcriptome_count) == Float64(0) && parse(Int, genome_count) == 0
+                i = i+1
+                push!(fasta_array,">$gene_name.kmer$i")
+                push!(fasta_array,"$mer")
+            end
+        end
+        step_time = Float64(time()-startt)
+    end # end of kmer analysis
+    
+    ## write tag file
+    run(`mkdir -p "$output/tags/$kmer_length"`)
+    writedlm("$output/tags/$kmer_length/$tag_file",
+    reshape(fasta_array,length(fasta_array)), "\n")
 end #end of function
-splitted_fasta_files = readdir("$output/sequences/$kmer_length/")
 
-#pmap(f, splitted_fasta_files, unannotated_option, genome, transcriptome, level, output, kmer_length, stringent_option, admission_threshold)
-pmap(f, splitted_fasta_files)
+print("\rExtract specific kmers                                  ")
+for n in 1:nworkers()+1 println("") end
+pmap(f, readdir("$output/sequences/$kmer_length/"))
+
 
 

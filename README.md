@@ -15,23 +15,17 @@ Interpretations of counts will differ, depending of the “level” option :
 
 ## Dependencies :
 
-- Kmerator is a julia script : Julia => v0.5 (https://julialang.org/downloads/)
-- Install Julia packages : open julia and type
-```
-        Pkg.add(“ParallelDataTransfer”)
-        Pkg.add(“ArgParse”)
-        Pkg.add(“FastaIO”)
-        Pkg.add(“RCall”) (temporary dependency, will be removed in next version)
-```
-- R + (stringi) & rjson libraries (temporary dependency, will be removed in next version)
+- Kmerator is a julia script : Julia => v0.5 (https://julialang.org/downloads/).
+- kmerator ask to install missing packages automatically so it is no need to install 
+ParallelDataTransfer, ArgParse, FastaIO, JSON and HTTP.
 - Jellyfish 2.0
 
 
 ## Usage
 ```
-julia -p [nb-threads] kmerator.jl [--selection [SELECTION...]] [--appris APPRIS] [-u]
+kmerator.jl [--selection [SELECTION...]] [--appris APPRIS] [-u]
                    [-s] [-v] -g GENOME -t TRANSCRIPTOME -l LEVEL
-                   [-o OUTPUT] [--length LENGTH]
+                   [-o OUTPUT] [--length LENGTH] -p [nb-threads]
                    [--threshold THRESHOLD] fasta_file
 ```
 
@@ -77,6 +71,7 @@ julia -p [nb-threads] kmerator.jl [--selection [SELECTION...]] [--appris APPRIS]
                         FOR GENE LEVEL ONLY : Minimum fraction of
                         annotated transcripts containing this kmer to
                         admit a tag (default 0.5) (default: 0.5)
+  -p, --procs PROCS     Run n local processes
   -h, --help            show this help message and exit
 
 ```
