@@ -2,7 +2,7 @@
 
 - [v] remove or print if verbose mode the _println()_ instructions.  (benoit) [2019-07-17]
 - [v] in APPRIS_function : change variables name toto, toto2, toto3 by other names. (benoit) [2019-07-17]
-
+- [] in APPRIS_function : only accept few choices of species as entry of APPRIS option (sebastien) [2019-11-13]
 
 
 ## PRIORITY MEDIUM
