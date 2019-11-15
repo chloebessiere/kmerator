@@ -390,7 +390,7 @@ function find_longest_variant(gene_name, transcriptome_dict)
     variants_dict = filter(k -> startswith(k.first, "$gene_name:"), transcriptome_dict)
     variants_lengths = Vector{Any}()
     for (k,v) in variants_dict
-        if verbose_option println(k, ": ", v[1:35], "...") end
+        #if verbose_option println(k, ": ", v[1:35], "...") end # bug if sequence length < 35
         push!(variants_lengths, length(v))
     end
     if verbose_option println("variants lengths : $variants_lengths") end
