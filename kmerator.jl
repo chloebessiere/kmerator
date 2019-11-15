@@ -278,7 +278,6 @@ function load_transcriptome(transcriptome_file)
     return transcriptome_dict
 end
 
-
 function run_jellyfish(genome, transcriptome_fa)
     jf_dir = "$output/jellyfish_indexes/$kmer_length"
     
@@ -294,10 +293,14 @@ function run_jellyfish(genome, transcriptome_fa)
     ## run jellyfish on genome if genome is fasta file
     if occursin(r".*\.(fa|fasta)$", genome)
         ! verbose_option ? print("\r") : println("------------")
-        print("Compute jellyfish on Genome              ")
+        println("Compute jellyfish on Genome              ")
         jf_genome = replace(basename(genome), ".fa" => ".jf")
         run(`jellyfish count -C -m $kmer_length -s 10000 -t $nbthreads -o $jf_dir/$jf_genome $genome`)
         if verbose_option println("\nGenome kmer index output: $jf_dir/$jf_genome.") end
+        return(jf_genome, jf_dir)
+    else
+        println("Jellyfish index provided, nothing to do")
+        jf_genome = genome
     end
 end
 
@@ -497,7 +500,7 @@ add_workers()
 using  ParallelDataTransfer
 checkup_variables()
 transcriptome_dict = load_transcriptome(transcriptome)
-run_jellyfish(genome, transcriptome)
+jf_genome, jf_dir = run_jellyfish(genome, transcriptome)
 build_sequences()
 
 
@@ -505,6 +508,8 @@ build_sequences()
 @passobj 1 workers() verbose_option
 @passobj 1 workers() transcriptome_dict
 @passobj 1 workers() genome
+@passobj 1 workers() jf_genome
+@passobj 1 workers() jf_dir
 @passobj 1 workers() transcriptome
 @passobj 1 workers() level
 @passobj 1 workers() output
@@ -512,9 +517,9 @@ build_sequences()
 @passobj 1 workers() stringent_option
 @passobj 1 workers() admission_threshold
 
-
 ## function for extraction of specifics kmers for one sequence fasta file.
 @everywhere function f(splitted_fasta_files)
+    println("on est entré dans la fonction f")
     myid() == 1 ? X = myid() : X = myid()-1
     elapsed_time = 0
     step_time = 0
@@ -539,7 +544,6 @@ build_sequences()
     elseif level == "chimera"
         tag_file = "$gene_name-chimera_specific.fa"
     end
-    fasta_array = Array([])
     # take the transcript sequence for jellyfish query
     sequence_fasta = "error if seen"
     FastaReader("$output/sequences/$kmer_length/$splitted_fasta_files") do fr
@@ -548,9 +552,10 @@ build_sequences()
         end
     end
     if verbose_option remotecall(replace_line, 1 , X, "worker number $(myid()), for $level $gene_name, reporting for duty ! :)\n") end
-    ## build kmer count dictionnary from genome
-    kmercounts_genome = read(`jellyfish query -s "$output/sequences/$kmer_length/$splitted_fasta_files" "$genome"`, String)
-    if verbose_option remotecall(replace_line, 1 , X, "jellyfish query $splitted_fasta_files on $genome finished") end
+    ## build kmer count dictionnary from genome's jellyfish
+    println("jellyfish query -s $output/sequences/$kmer_length/$splitted_fasta_files $jf_dir/$jf_genome")
+    kmercounts_genome = read(`jellyfish query -s "$output/sequences/$kmer_length/$splitted_fasta_files" "$jf_dir/$jf_genome"`, String)
+    if verbose_option remotecall(replace_line, 1 , X, "jellyfish query $splitted_fasta_files on $jf_dir/$jf_genome finished") end
     kmercounts_genome = split(kmercounts_genome, "\n")[1:end-1]
     kmercounts_genome_dict = Dict()
     for mer in kmercounts_genome
