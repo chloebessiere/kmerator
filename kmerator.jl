@@ -122,7 +122,7 @@ function parse_commandline()
         "--threshold"
             help = """FOR GENE LEVEL ONLY : Minimum fraction of annotated transcripts 
                 containing this kmer to admit it (default 0)"""
-            default = 0.5
+            default = 0.0
             arg_type = Float64
     end
     return parse_args(s)
@@ -274,7 +274,7 @@ function load_transcriptome(transcriptome_file)
             break
         end
     end
-    if verbose_option println("transcripts_distionarty finished") end
+    if verbose_option println("transcripts_dictionary finished") end
     return transcriptome_dict
 end
 
