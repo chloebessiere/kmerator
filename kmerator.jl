@@ -300,7 +300,12 @@ function run_jellyfish(genome, transcriptome_fa)
         return(jf_genome, jf_dir)
     else
         println("Jellyfish index provided, nothing to do")
-        jf_genome = genome
+
+        jf_genome = basename(genome)
+        jf_dir = dirname(genome)
+
+        return(jf_genome, jf_dir)
+
     end
 end
 
