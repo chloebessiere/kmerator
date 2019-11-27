@@ -524,7 +524,7 @@ build_sequences()
 
 ## function for extraction of specifics kmers for one sequence fasta file.
 @everywhere function f(splitted_fasta_files)
-    println("on est entré dans la fonction f")
+    fasta_array = Array([])
     myid() == 1 ? X = myid() : X = myid()-1
     elapsed_time = 0
     step_time = 0
